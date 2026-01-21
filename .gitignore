@@ -1,0 +1,5 @@
+node_modules/
+.env
+executar_martiaco.bat
+.DS_Store
+Thumbs.db

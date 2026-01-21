@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Axon Technology | ETL Monitor</title>
+        <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <style>
+            :root {
+                --axon-black: #0b0d0f;
+                --axon-dark: #161a1e;
+                --axon-green: #00937a;
+                --axon-green-hover: #00b395;
+                --axon-red: #d93025;
+                --axon-yellow: #f1c40f;
+                --axon-orange: #f39c12;
+                --axon-border: #2c3136;
+                --text-main: #ffffff;
+                --text-dim: #a0a6ad;
+            }
+
+            @keyframes pulse-yellow {
+                0% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.4); border-color: var(--axon-yellow); }
+                70% { box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); border-color: var(--axon-border); }
+                100% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); border-color: var(--axon-yellow); }
+            }
+
+            @keyframes pulse-red {
+                0% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.4); border-color: var(--axon-red); }
+                70% { box-shadow: 0 0 0 10px rgba(217, 48, 37, 0); border-color: var(--axon-border); }
+                100% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0); border-color: var(--axon-red); }
+            }
+
+            @keyframes pulse-orange {
+                0% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4); border-color: var(--axon-orange); }
+                70% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0); border-color: var(--axon-border); }
+                100% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0); border-color: var(--axon-orange); }
+            }
+
+            body { 
+                font-family: 'Inter', sans-serif; 
+                margin: 0; 
+                background-color: var(--axon-black); 
+                color: var(--text-main);
+                -webkit-font-smoothing: antialiased;
+            }
+
+            header {
+                background-color: var(--axon-dark);
+                padding: 1rem 2rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid var(--axon-border);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            }
+
+            .logo h1 {
+                margin: 0;
+                font-size: 1.2rem;
+                font-weight: 800;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+            }
+
+            .logo span { color: var(--axon-green); }
+            .controls { display: flex; gap: 12px; align-items: center; }
+
+            select, button {
+                background: #21262d;
+                color: white;
+                border: 1px solid var(--axon-border);
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            button { background-color: var(--axon-green); border: none; }
+            button:hover { background-color: var(--axon-green-hover); }
+
+            .container { max-width: 1100px; margin: 2rem auto; padding: 0 20px; }
+
+            .module-card {
+                background-color: var(--axon-dark);
+                border: 1px solid var(--axon-border);
+                border-radius: 8px;
+                margin-bottom: 12px;
+                transition: all 0.3s ease;
+            }
+
+            .module-card.stale { animation: pulse-yellow 2s infinite; }
+            .module-card.failed { animation: pulse-red 2s infinite; }
+            .module-card.partial { animation: pulse-orange 2s infinite; }
+
+            .module-card:hover { border-color: var(--axon-green); }
+
+            .card-header {
+                padding: 16px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+            }
+
+            .module-title { display: flex; align-items: center; gap: 12px; font-weight: 600; flex: 1; }
+
+            .module-timestamp { 
+                display: flex;
+                gap: 20px;
+                margin-right: 25px;
+                font-family: 'Inter', sans-serif;
+            }
+
+            .time-group {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                min-width: 50px;
+            }
+
+            .time-group label {
+                font-size: 0.6rem;
+                color: var(--axon-green);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 2px;
+                font-weight: 700;
+            }
+
+            .time-group span {
+                font-size: 0.85rem;
+                color: var(--text-main);
+                font-family: monospace;
+            }
+
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+            }
+            .dot-success { background: var(--axon-green); box-shadow: 0 0 8px var(--axon-green); }
+            .dot-failure { background: var(--axon-red); box-shadow: 0 0 8px var(--axon-red); }
+            .dot-stale { background: var(--axon-yellow); box-shadow: 0 0 8px var(--axon-yellow); }
+            .dot-partial { background: var(--axon-orange); box-shadow: 0 0 8px var(--axon-orange); }
+
+            .details-pane {
+                display: none;
+                padding: 20px;
+                background: rgba(0,0,0,0.15);
+                border-top: 1px solid var(--axon-border);
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 20px;
+            }
+
+            .stat label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 4px; }
+            .stat span { font-size: 0.95rem; font-weight: 500; }
+
+            .error-msg {
+                grid-column: 1 / -1;
+                color: #ffffff;
+                padding: 12px;
+                border-radius: 4px;
+                font-size: 0.85rem;
+                border-left: 3px solid transparent;
+            }
+
+            .status-label { font-size: 0.8rem; font-weight: 700; min-width: 70px; text-align: right; }
+        </style>
+    </head>
+    <body>
+
+    <header>
+        <div class="logo"><h1>AXON <span>TECHNOLOGY</span></h1></div>
+        <div class="controls">
+            <label style="font-size: 0.8rem; color: var(--text-dim)">Cliente:</label>
+            <select id="client-selector" onchange="loadData()"></select>
+            <button onclick="loadData()">ATUALIZAR</button>
+        </div>
+    </header>
+
+    <div class="container" id="client-list">
+        <p style="color: var(--axon-green)">Iniciando monitoramento...</p>
+    </div>
+
+    <script>
+        const CLIENT_CONFIGS = {
+            'MARTIAÇO': {
+                url: 'https://zzgsjqytlwmkbubnjgrg.supabase.co',
+                anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Z3NqcXl0bHdta2J1Ym5qZ3JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0ODc3MTcsImV4cCI6MjA3NjA2MzcxN30.apssLdHLlbIlDuPejX6QnYE5NIKg2607bwzMAgs_Zq8'
+            },
+        };
+
+        const clientListDiv = document.getElementById('client-list');
+        let supabaseClientInstance;
+
+        function formatDuration(ms) {
+            if (!ms) return '0s';
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+            return `${minutes}m ${seconds}s`;
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes) return '0 MB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        function populateClientSelector() {
+            const selector = document.getElementById('client-selector');
+            selector.innerHTML = '';
+            for (const name in CLIENT_CONFIGS) {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                selector.appendChild(opt);
+            }
+        }
+
+        async function loadData() {
+            const btn = document.querySelector('button[onclick="loadData()"]');
+            const originalText = btn.textContent;
+            btn.textContent = 'CARREGANDO...';
+            btn.disabled = true;
+
+            const selectedClient = document.getElementById('client-selector').value;
+            const config = CLIENT_CONFIGS[selectedClient];
+
+            try {
+                supabaseClientInstance = window.supabase.createClient(config.url, config.anonKey);
+                const { data, error } = await supabaseClientInstance.from('view_latest_sync_status').select('*');
+
+                if (error) throw error;
+
+                const normalize = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+                const selectedNormalized = normalize(selectedClient);
+
+                let filtered = data.filter(item => 
+                    normalize(item.client_prefix || item.client_name || '') === selectedNormalized
+                );
+
+                const orderMap = { 
+                    'CUSTOMERS': 10, 
+                    'RH-FUNCIONARIOS': 25, 
+                    'SUPPLIERS': 30,
+                    'PRODUCTS': 40, 
+                    'STOCKITEMS': 50,
+                    'BOMITEMS': 60,
+                    'PRODUCTION': 80,
+                    'PURCHASE': 90,
+                    'CONTASPAGAR': 100,
+                    'CONTASRECEBER': 110,
+                    'SALESORDERS': 120, 
+                    'HISTAPONTAMENTO': 130,
+                    'NFRECEBIMENTO': 140,
+                    'FATCLIENTEMENSAL': 150 
+                };
+
+                filtered.sort((a, b) => {
+                    const getPriority = (name) => {
+                        const upperName = name.toUpperCase();
+                        for (const key in orderMap) { 
+                            if (upperName.includes(key)) return orderMap[key]; 
+                        }
+                        return 999;
+                    };
+                    return getPriority(a.module_name) - getPriority(b.module_name);
+                });
+
+                renderDashboard(filtered);
+            } catch (e) {
+                clientListDiv.innerHTML = `<p style="color: var(--axon-red)">Erro: ${e.message}</p>`;
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function renderDashboard(data) {
+            clientListDiv.innerHTML = '';
+            const now = new Date();
+
+            data.forEach((task, i) => {
+                const dateObj = new Date(task.last_execution_time);
+                const diffMs = now - dateObj;
+
+                const isStale = diffMs > (35 * 60 * 1000); 
+                const success = task.status === 'SUCESSO';
+
+                const details = task.details || {};
+                const totalOrigem = details.total_records_source || task.total_records_sent || 0;
+                const totalEnviado = task.total_records_sent || 0;
+                const isPartial = success && totalEnviado < totalOrigem && totalEnviado > 0;
+
+                let statusLabel = 'ESTÁVEL';
+                let dotClass = 'dot-success';
+                let labelColor = 'var(--axon-green)';
+                let cardClass = '';
+
+                if (!success) {
+                    statusLabel = 'FALHA';
+                    dotClass = 'dot-failure';
+                    labelColor = 'var(--axon-red)';
+                    cardClass = 'failed';
+                } else if (isStale) {
+                    statusLabel = 'ATRASADO';
+                    dotClass = 'dot-stale';
+                    labelColor = 'var(--axon-yellow)';
+                    cardClass = 'stale';
+                } else if (isPartial) {
+                    statusLabel = 'PARCIAL';
+                    dotClass = 'dot-partial';
+                    labelColor = 'var(--axon-orange)';
+                    cardClass = 'partial';
+                }
+
+                const card = document.createElement('div');
+                card.className = `module-card ${cardClass}`;
+
+                const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                card.innerHTML = `
+                    <div class="card-header" onclick="toggle(${i})">
+                        <div class="module-title">
+                            <div class="status-dot ${dotClass}"></div>
+                            ${task.module_name}
+                        </div>
+                        <div class="module-timestamp">
+                            <div class="time-group">
+                                <label style="color: ${labelColor}">Data</label>
+                                <span>${dateStr}</span>
+                            </div>
+                            <div class="time-group">
+                                <label style="color: ${labelColor}">Hora</label>
+                                <span>${timeStr}</span>
+                            </div>
+                        </div>
+                        <div class="status-label" style="color: ${labelColor}">
+                            ${statusLabel}
+                        </div>
+                    </div>
+                    <div class="details-pane" id="pane-${i}">
+                        <div class="stat"><label>Duração</label><span>${formatDuration(task.duration_ms)}</span></div>
+                        <div class="stat"><label>Sincronização</label><span>${totalEnviado} / ${totalOrigem} registros</span></div>
+                        <div class="stat"><label>Volume</label><span>${formatBytes(task.data_size_bytes)}</span></div>
+
+                        ${!success ? `
+                            <div class="error-msg" style="background: rgba(217, 48, 37, 0.1); border-color: var(--axon-red);">
+                                <strong>Erro Crítico:</strong><br>${task.error_message}
+                            </div>` : ''}
+
+                        ${isPartial ? `
+                            <div class="error-msg" style="background: rgba(243, 156, 18, 0.1); border-color: var(--axon-orange); color: var(--axon-orange);">
+                                <strong>Aviso de Envio Parcial:</strong><br>
+                                Alguns registros foram ignorados devido a erros de lógica no ERP. Verifique os arquivos .log na pasta do motor.
+                            </div>` : ''}
+
+                        ${isStale && success ? `
+                            <div class="error-msg" style="background: rgba(241, 196, 15, 0.1); border-color: var(--axon-yellow); color: var(--axon-yellow);">
+                                <strong>Alerta de Atraso:</strong><br>Este módulo não roda há mais de 35 minutos. O servidor pode estar travado.
+                            </div>` : ''}
+                    </div>
+                `;
+                clientListDiv.appendChild(card);
+            });
+        }
+
+        function toggle(i) {
+            const p = document.getElementById(`pane-${i}`);
+            p.style.display = p.style.display === 'grid' ? 'none' : 'grid';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateClientSelector();
+            loadData();
+            setInterval(loadData, 60000);
+        });
+    </script>
+    </body>
+</html>
