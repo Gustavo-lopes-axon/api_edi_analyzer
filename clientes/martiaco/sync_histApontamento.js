@@ -39,6 +39,7 @@ const supabaseConfig = getSupabaseConfig(clientPrefix);
 
 const queryHistApontamento = `
     SELECT 
+        recno,
         DATAHORA as datahora,
         USUARIO as usuario,
         ODF as odf,
