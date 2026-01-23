@@ -244,6 +244,7 @@
                 );
 
                 const orderMap = { 
+                    'NEXTFRONT': 5,
                     'CUSTOMERS': 10, 
                     'RH-FUNCIONARIOS': 25, 
                     'SUPPLIERS': 30,
@@ -288,7 +289,8 @@
                 const dateObj = new Date(task.last_execution_time);
                 const diffMs = now - dateObj;
 
-                const isStale = diffMs > (35 * 60 * 1000); 
+                const staleLimit = task.module_name.includes('NEXTFRONT') ? (5 * 60 * 1000) : (35 * 60 * 1000);
+                const isStale = diffMs > staleLimit;
                 const success = task.status === 'SUCESSO';
 
                 const details = task.details || {};
