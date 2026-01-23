@@ -20,6 +20,7 @@ const modules = [
     'sync_fatClienteMensal.js',
     'sync_rhFuncionarios.js',
     'sync_histApontamento.js',
+    'sync_nextFront.js',
 ];
 
 dispararTodasAsTarefas(clientKey, modules, __dirname);
