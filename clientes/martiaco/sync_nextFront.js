@@ -92,12 +92,21 @@ const queryNextFront = `
 const listaDeTarefas = [
     {
         nomeEmpresa: `${clientPrefix}-NextFront-Upsert`,
-        mssqlConfig: mssqlConfig,
+        mssqlConfig: mssqlConfig, 
         supabaseConfig: supabaseConfig,
         query: queryNextFront,
         rpcFunctionName: 'sincronizar_next_front',
         rpcParameterName: 'json_input',
         usaLotes: true,
+    },
+    {
+        nomeEmpresa: `${clientPrefix}-NextFront-Clean`, 
+        mssqlConfig: mssqlConfig,
+        supabaseConfig: supabaseConfig,
+        query: "SELECT 1 as id",
+        rpcFunctionName: 'limpar_next_front_orfaos',
+        rpcParameterName: 'json_input',
+        usaLotes: false,
     }
 ];
 
