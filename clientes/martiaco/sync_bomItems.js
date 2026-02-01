@@ -18,7 +18,7 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const { iniciarSincronizacao } = require('../../engines/mssqlClient.js');
 
 const { logTaskStatus, initializeLogger } = require('../../engines/logger.js');
-const { getMssqlConfig, getSupabaseConfig } = require('../../engines/config.js');
+const { getMssqlConfig, getSupabaseConfig } = require('../../utils/config.js');
 
 
 const clientKey = process.argv[2];
