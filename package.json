@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "main": "etlClient.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node clientes/pedertractor/api/index.js",
+    "api": "node clientes/pedertractor/api/index.js",
+    "api:martiaco": "node clientes/martiaco/api/index.js",
+    "api:pedertractor": "node clientes/pedertractor/api/index.js"
   },
   "keywords": [],
   "author": "",
@@ -12,7 +16,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.81.0",
     "dotenv": "^17.2.3",
+    "express": "^4.21.0",
     "mssql": "^12.1.0",
+    "mysql2": "^3.17.4",
     "node-firebird": "^1.1.9"
   }
 }
