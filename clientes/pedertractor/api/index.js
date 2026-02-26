@@ -5,11 +5,13 @@
  *   node clientes/pedertractor/api/index.js
  *   PORT=3001 node clientes/pedertractor/api/index.js
  *
- * Variáveis de ambiente (prefixo PEDERTRACTOR_):
- *   FB_HOST, FB_PORT, FB_DATABASE, FB_USER, FB_PASSWORD, FB_ROLE
+ * Autenticação (Basic Auth):
+ *   Credenciais em .env: PEDERTRACTOR_API_USER e PEDERTRACTOR_API_PASSWORD.
+ *   Token = Base64 de "usuario:senha". Exemplo: node -e "console.log(Buffer.from('demo:p@55w0rd').toString('base64'))"
+ *   Header: Authorization: Basic <token>
  *
- * Endpoints:
- *   GET /customers/:cnpj  – cliente por CNPJ (view VW_AXON_CAD_CLIENTE)
+ * Variáveis de ambiente (prefixo PEDERTRACTOR_):
+ *   FB_*, MYSQL_*, API_USER, API_PASSWORD
  */
 
 const path = require("path");
@@ -27,6 +29,60 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
+
+/**
+ * Validação por login e senha via Basic Auth.
+ * Header esperado: Authorization: Basic <base64(usuario:senha)>
+ * Credenciais em .env: PEDERTRACTOR_API_USER e PEDERTRACTOR_API_PASSWORD.
+ * Rotas em /health não exigem autenticação.
+ */
+const apiUser = process.env.PEDERTRACTOR_API_USER;
+const apiPassword = process.env.PEDERTRACTOR_API_PASSWORD;
+const authEnabled = apiUser != null && apiUser !== "" && apiPassword != null;
+
+if (!authEnabled) {
+  console.warn("[API] PEDERTRACTOR_API_USER ou PEDERTRACTOR_API_PASSWORD não definidos; requisições não serão autenticadas.");
+}
+
+app.use((req, res, next) => {
+  if (req.path === "/health") return next();
+  if (!authEnabled) return next();
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Basic\s+/i.test(authHeader)) {
+    return res.status(401).json({
+      success: false,
+      error: "Não autorizado",
+      message: "Header Authorization: Basic <token> é obrigatório.",
+    });
+  }
+
+  const base64 = authHeader.replace(/^Basic\s+/i, "").trim();
+  let decoded;
+  try {
+    decoded = Buffer.from(base64, "base64").toString("utf8");
+  } catch (_) {
+    return res.status(401).json({
+      success: false,
+      error: "Não autorizado",
+      message: "Token Base64 inválido.",
+    });
+  }
+
+  const colon = decoded.indexOf(":");
+  const user = colon >= 0 ? decoded.slice(0, colon) : decoded;
+  const password = colon >= 0 ? decoded.slice(colon + 1) : "";
+
+  if (user !== apiUser || password !== apiPassword) {
+    return res.status(401).json({
+      success: false,
+      error: "Não autorizado",
+      message: "Login ou senha inválidos.",
+    });
+  }
+
+  next();
+});
 
 app.use("/customers", customersRouter);
 app.use("/items", itemsRouter);
