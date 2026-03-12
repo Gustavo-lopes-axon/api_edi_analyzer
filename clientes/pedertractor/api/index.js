@@ -28,7 +28,8 @@ const ordersRouter = require("./routes/orders.js");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(express.json());
+const jsonLimit = process.env.PEDERTRACTOR_API_JSON_LIMIT || "100mb";
+app.use(express.json({ limit: jsonLimit }));
 
 /**
  * Validação por login e senha via Basic Auth.
@@ -41,7 +42,9 @@ const apiPassword = process.env.PEDERTRACTOR_API_PASSWORD;
 const authEnabled = apiUser != null && apiUser !== "" && apiPassword != null;
 
 if (!authEnabled) {
-  console.warn("[API] PEDERTRACTOR_API_USER ou PEDERTRACTOR_API_PASSWORD não definidos; requisições não serão autenticadas.");
+  console.warn(
+    "[API] PEDERTRACTOR_API_USER ou PEDERTRACTOR_API_PASSWORD não definidos; requisições não serão autenticadas.",
+  );
 }
 
 app.use((req, res, next) => {
@@ -109,22 +112,46 @@ function tryListen(port) {
     console.log(`API PEDERTRACTOR rodando em http://localhost:${port}`);
     console.log("  GET /customers/:cnpj (Firebird)");
     console.log("  GET /items?customerPN=... (Firebird)");
-    console.log("  GET /issued-invoices?customerCode=...&customerPurchaseOrder=...&customerPN=...&startDate=...&endDate=...");
-    console.log("  GET /received-invoices?customerCode=...&customerPN=...&startDate=...&endDate=...");
-    console.log("  GET /releases/status?customerCnpj=...&customerReleaseId=...&releaseDate=...");
-    console.log("  POST /releases/status (body: releaseId, timestamp, releaseStatus)");
+    console.log(
+      "  GET /issued-invoices?customerCode=...&customerPurchaseOrder=...&customerPN=...&startDate=...&endDate=...",
+    );
+    console.log(
+      "  GET /received-invoices?customerCode=...&customerPN=...&startDate=...&endDate=...",
+    );
+    console.log(
+      "  GET /releases/status?customerCnpj=...&customerReleaseId=...&releaseDate=...",
+    );
+    console.log(
+      "  POST /releases/status (body: releaseId, timestamp, releaseStatus)",
+    );
     console.log("  POST /releases (body: release JSON)");
-    console.log("  POST /analysis (body: releaseId, force, analysisVersion, analysisConfigs)");
-    console.log("  GET /analysis/items/last-firm-date?customerCnpj=...&customerPurchaseOrder=...&customerPN=...");
+    console.log(
+      "  POST /analysis (body: releaseId, force, analysisVersion, analysisConfigs)",
+    );
+    console.log(
+      "  GET /analysis/items/last-firm-date?customerCnpj=...&customerPurchaseOrder=...&customerPN=...",
+    );
     console.log("  POST /analysis/items (body: itemAnalysis)");
-    console.log("  PUT /analysis/items/implementation-comments (body: itemAnalysisId, comments)");
-    console.log("  PUT /analysis/duration-and-totals (body: releaseAnalysisId, analysisDuration, totals)");
-    console.log("  POST /analysis/status (body: releaseAnalysisId, timestamp, analysisStatus)");
+    console.log(
+      "  PUT /analysis/items/implementation-comments (body: itemAnalysisId, comments)",
+    );
+    console.log(
+      "  PUT /analysis/duration-and-totals (body: releaseAnalysisId, analysisDuration, totals)",
+    );
+    console.log(
+      "  POST /analysis/status (body: releaseAnalysisId, timestamp, analysisStatus)",
+    );
     console.log("  GET /orders/backlog?customerCode=...");
     console.log("  POST /orders (body: customerCode, customerPurchaseOrder)");
-    console.log("  POST /orders/items (body: customerCode, customerPurchaseOrder, item)");
-    console.log("  PUT /orders/deliveries (body: customerCode, customerPurchaseOrder, item)");
-    console.log("  GET /api/axon/prox/v1/items | issued-invoices | received-invoices | releases | analysis | orders");
+    console.log(
+      "  POST /orders/items (body: customerCode, customerPurchaseOrder, item)",
+    );
+    console.log(
+      "  PUT /orders/deliveries (body: customerCode, customerPurchaseOrder, item)",
+    );
+    console.log(
+      "  GET /api/axon/prox/v1/items | issued-invoices | received-invoices | releases | analysis | orders",
+    );
     console.log("  GET /health");
   });
   server.on("error", (err) => {
