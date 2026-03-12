@@ -127,8 +127,8 @@ router.post("/", async (req, res) => {
     let recordId;
     try {
       const [[releaseRow]] = await conn.execute(
-        "SELECT id FROM releases WHERE customer_release_id = ? OR custom_id LIKE ? LIMIT 1",
-        [releaseId, `%|r:${releaseId}`]
+        "SELECT id FROM releases WHERE id = ? OR customer_release_id = ? OR custom_id LIKE ? LIMIT 1",
+        [releaseId, releaseId, `%|r:${releaseId}`]
       );
 
       if (!releaseRow) {
