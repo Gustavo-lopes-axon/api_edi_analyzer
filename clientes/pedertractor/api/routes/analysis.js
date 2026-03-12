@@ -127,8 +127,15 @@ router.post("/", async (req, res) => {
     let recordId;
     try {
       const [[releaseRow]] = await conn.execute(
-        "SELECT id FROM releases WHERE id = ? OR customer_release_id = ? OR custom_id LIKE ? LIMIT 1",
-        [releaseId, releaseId, `%|r:${releaseId}`]
+        `SELECT r.id
+         FROM releases r
+         INNER JOIN customers c ON c.id = r.customer_id
+         WHERE r.id = ?
+            OR r.customer_release_id = ?
+            OR r.custom_id LIKE ?
+            OR CONCAT(c.internal_code, r.customer_release_id) = ?
+         LIMIT 1`,
+        [releaseId, releaseId, `%|r:${releaseId}`, releaseId]
       );
 
       if (!releaseRow) {
