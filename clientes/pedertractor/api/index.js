@@ -28,7 +28,8 @@ const ordersRouter = require("./routes/orders.js");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(express.json());
+const jsonLimit = process.env.PEDERTRACTOR_API_JSON_LIMIT || "100mb";
+app.use(express.json({ limit: jsonLimit }));
 
 app.use((req, res, next) => {
   console.log(`[API-EDI RECEBEU] ${req.method} ${req.originalUrl}`);
