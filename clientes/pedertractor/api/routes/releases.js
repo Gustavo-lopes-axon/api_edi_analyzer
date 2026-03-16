@@ -98,7 +98,7 @@ router.get("/", (req, res) => {
     const releaseList = Array.isArray(rows) ? rows : [];
     const releases = releaseList.map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
-      const idVal = pk != null ? Number(pk) : pk;
+      const idValStr = pk != null ? String(pk) : "";
       const releaseDate = row.release_date;
       const releaseDateStr =
         releaseDate instanceof Date
@@ -107,8 +107,8 @@ router.get("/", (req, res) => {
             ? String(releaseDate).slice(0, 10)
             : "";
       return {
-        id: idVal,
-        releaseId: idVal,
+        id: idValStr,
+        releaseId: idValStr,
         customId: row.custom_id ?? "",
         customerReleaseId: row.customer_release_id ?? "",
         releaseDate: releaseDateStr,
