@@ -138,12 +138,22 @@ router.get("/", (req, res) => {
         records: releases,
       },
     };
+    let jsonStr;
     try {
-      return res.status(200).json(payload);
-    } catch (sendErr) {
-      console.error("[GET /releases] res.json error:", sendErr && (sendErr.message || String(sendErr)));
-      throw sendErr;
+      jsonStr = JSON.stringify(payload);
+    } catch (serializeErr) {
+      console.error("[GET /releases] JSON.stringify error:", serializeErr && (serializeErr.message || String(serializeErr)));
+      if (!res.headersSent) {
+        return res.status(500).json({
+          success: false,
+          error: "Internal server error",
+          message: "Response serialization failed",
+        });
+      }
+      return;
     }
+    res.status(200).setHeader("Content-Type", "application/json; charset=utf-8").send(jsonStr);
+    console.log("[GET /releases] response sent");
     } catch (err) {
       const msg = err && (err.message || err.code || String(err));
       console.error("GET /releases:", msg);
