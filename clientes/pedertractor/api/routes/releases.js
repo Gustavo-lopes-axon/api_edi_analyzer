@@ -78,6 +78,7 @@ router.get("/", (req, res) => {
     const offset = Math.max(0, (page - 1) * pageSize);
 
     const countRows = await executarQueryMySQL(CLIENT_PREFIX, "SELECT COUNT(*) AS total FROM releases");
+    console.log("[GET /releases] after count");
     const total = Number(countRows?.[0]?.total ?? 0);
 
     const limitNum = Math.min(100, Math.max(0, Math.floor(Number(pageSize)) || 30));
@@ -92,6 +93,7 @@ router.get("/", (req, res) => {
        ORDER BY r.${orderBy} ${orderDir}
        LIMIT ${limitNum} OFFSET ${offsetNum}`
     );
+    console.log("[GET /releases] after list query");
 
     const releaseList = Array.isArray(rows) ? rows : [];
     const releases = releaseList.map((row) => {
@@ -113,7 +115,7 @@ router.get("/", (req, res) => {
         releaseStatus: row.release_status ?? "",
         itemsQty: Number(row.items_qty) || 0,
         deliveriesQty: Number(row.deliveries_qty) || 0,
-        createdAt: row.created_at,
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : (row.created_at != null ? String(row.created_at) : null),
         customer: {
           cnpj: row.customer_cnpj ?? "",
           internalCode: row.customer_internal_code ?? "",
@@ -125,7 +127,8 @@ router.get("/", (req, res) => {
     const totalRecords = total;
     const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
-    return res.status(200).json({
+    console.log("[GET /releases] before send, records:", releases.length);
+    const payload = {
       success: true,
       data: {
         page,
@@ -134,7 +137,13 @@ router.get("/", (req, res) => {
         totalPages,
         records: releases,
       },
-    });
+    };
+    try {
+      return res.status(200).json(payload);
+    } catch (sendErr) {
+      console.error("[GET /releases] res.json error:", sendErr && (sendErr.message || String(sendErr)));
+      throw sendErr;
+    }
     } catch (err) {
       const msg = err && (err.message || err.code || String(err));
       console.error("GET /releases:", msg);
