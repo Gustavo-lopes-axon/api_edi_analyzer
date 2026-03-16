@@ -110,6 +110,14 @@ app.use("/api/axon/prox/v1/releases", releasesRouter);
 app.use("/api/axon/prox/v1/analysis", analysisRouter);
 app.use("/api/axon/prox/v1/orders", ordersRouter);
 
+app.use("/api/v1/customers", customersRouter);
+app.use("/api/v1/items", itemsRouter);
+app.use("/api/v1/issued-invoices", issuedInvoicesRouter);
+app.use("/api/v1/received-invoices", receivedInvoicesRouter);
+app.use("/api/v1/releases", releasesRouter);
+app.use("/api/v1/analysis", analysisRouter);
+app.use("/api/v1/orders", ordersRouter);
+
 app.get("/health", (req, res) => {
   res.json({ status: "ok", client: "PEDERTRACTOR" });
 });

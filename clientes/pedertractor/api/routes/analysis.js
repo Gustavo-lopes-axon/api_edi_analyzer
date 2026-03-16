@@ -103,6 +103,85 @@ function validateItemAnalysisBody(body) {
 }
 
 /**
+ * GET /analysis?releaseId=...
+ * Lista análises de um release. releaseId é obrigatório (query string).
+ * releaseId pode ser: id interno, customer_release_id ou recordId (internal_code + customer_release_id).
+ */
+router.get("/", async (req, res) => {
+  try {
+    const releaseId = (req.query.releaseId ?? req.query.release_id ?? "").toString().trim();
+    if (!releaseId) {
+      return res.status(400).json({
+        success: false,
+        error: "releaseId is a required parameter",
+        message: "releaseId is a required parameter",
+      });
+    }
+
+    const conn = await getConnectionMySQL(CLIENT_PREFIX);
+    let releasePk = null;
+    try {
+      const [[releaseRow]] = await conn.execute(
+        `SELECT r.id
+         FROM releases r
+         INNER JOIN customers c ON c.id = r.customer_id
+         WHERE r.id = ?
+            OR r.customer_release_id = ?
+            OR r.custom_id LIKE ?
+            OR CONCAT(c.internal_code, r.customer_release_id) = ?
+         LIMIT 1`,
+        [releaseId, releaseId, `%|r:${releaseId}`, releaseId]
+      );
+      releasePk = releaseRow?.id ?? null;
+    } finally {
+      conn.release();
+    }
+
+    if (releasePk == null) {
+      return res.status(404).json({
+        success: false,
+        error: "Release not found",
+        message: `Release with releaseId "${releaseId}" not found.`,
+      });
+    }
+
+    const rows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT id, release_id, \`force\`, analysis_version, analysis_status,
+              analysis_duration, created_at
+       FROM release_analyses
+       WHERE release_id = ?
+       ORDER BY id DESC`,
+      [releasePk]
+    );
+
+    const records = (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: row.id,
+      releaseId: row.release_id,
+      force: Boolean(row.force),
+      analysisVersion: row.analysis_version,
+      analysisStatus: row.analysis_status,
+      analysisDuration: row.analysis_duration,
+      createdAt: row.created_at,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: { releaseId, analyses: records },
+    });
+  } catch (err) {
+    const msg = err && (err.message || err.code || String(err));
+    console.error("GET /analysis:", msg);
+    if (err && err.stack) console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: "Erro no servidor",
+      message: msg || "Erro desconhecido",
+    });
+  }
+});
+
+/**
  * POST /analysis
  * Insere novo registro de análise para um release.
  * Corpo: { releaseId, force, analysisVersion, analysisConfigs } (todos obrigatórios).
