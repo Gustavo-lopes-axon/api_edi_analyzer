@@ -62,9 +62,11 @@ function validateReleaseBody(body) {
  * Lista releases com paginação. Query: page (default 1), pageSize (default 30), sort (ex: -releaseDate = DESC, releaseDate = ASC).
  * Retorna { success, data: { releases, total, page, pageSize } }.
  */
-router.get("/", async (req, res) => {
-  try {
-    const query = req.query || {};
+router.get("/", (req, res) => {
+  const run = async () => {
+    try {
+      console.log("[GET /releases] handler start");
+      const query = req.query || {};
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
     const sortParam = String(query.sort ?? "-releaseDate").trim() || "-releaseDate";
@@ -133,16 +135,30 @@ router.get("/", async (req, res) => {
         records: releases,
       },
     });
-  } catch (err) {
-    const msg = err && (err.message || err.code || String(err));
-    console.error("GET /releases:", msg);
+    } catch (err) {
+      const msg = err && (err.message || err.code || String(err));
+      console.error("GET /releases:", msg);
+      if (err && err.stack) console.error(err.stack);
+      if (!res.headersSent) {
+        return res.status(500).json({
+          success: false,
+          error: "Internal server error",
+          message: msg || "Erro desconhecido",
+        });
+      }
+    }
+  };
+  run().catch((err) => {
+    console.error("GET /releases unhandled rejection:", err && (err.message || err.code || String(err)));
     if (err && err.stack) console.error(err.stack);
-    return res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: msg || "Erro desconhecido",
-    });
-  }
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+        message: (err && (err.message || err.code || String(err))) || "Erro desconhecido",
+      });
+    }
+  });
 });
 
 /**
