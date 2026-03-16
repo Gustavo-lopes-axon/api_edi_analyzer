@@ -58,6 +58,76 @@ function validateReleaseBody(body) {
 
 
 /**
+ * GET /releases
+ * Lista releases com paginação. Query: page (default 1), pageSize (default 30), sort (ex: -releaseDate = DESC, releaseDate = ASC).
+ * Retorna { success, data: { releases, total, page, pageSize } }.
+ */
+router.get("/", async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 30));
+    const sortParam = (req.query.sort ?? "-releaseDate").toString().trim();
+    const isDesc = sortParam.startsWith("-");
+    const sortField = (isDesc ? sortParam.slice(1) : sortParam) || "release_date";
+    const allowedSort = ["release_date", "releaseDate", "created_at", "customer_release_id", "release_status"];
+    const orderBy = allowedSort.includes(sortField) ? sortField.replace("releaseDate", "release_date") : "release_date";
+    const orderDir = isDesc ? "DESC" : "ASC";
+    const offset = (page - 1) * pageSize;
+
+    const countRows = await executarQueryMySQL(CLIENT_PREFIX, "SELECT COUNT(*) AS total FROM releases");
+    const total = Number(countRows?.[0]?.total ?? 0);
+
+    const rows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT r.id, r.custom_id, r.customer_release_id, r.release_date, r.release_status,
+              r.items_qty, r.deliveries_qty, r.created_at,
+              c.cnpj AS customer_cnpj, c.internal_code AS customer_internal_code, c.company_name AS customer_company_name
+       FROM releases r
+       JOIN customers c ON c.id = r.customer_id
+       ORDER BY r.${orderBy} ${orderDir}
+       LIMIT ? OFFSET ?`,
+      [pageSize, offset]
+    );
+
+    const releaseList = Array.isArray(rows) ? rows : [];
+    const releases = releaseList.map((row) => ({
+      id: row.id,
+      customId: row.custom_id,
+      customerReleaseId: row.customer_release_id,
+      releaseDate: row.release_date instanceof Date ? row.release_date.toISOString().slice(0, 10) : String(row.release_date || "").slice(0, 10),
+      releaseStatus: row.release_status,
+      itemsQty: row.items_qty ?? 0,
+      deliveriesQty: row.deliveries_qty ?? 0,
+      createdAt: row.created_at,
+      customer: {
+        cnpj: row.customer_cnpj,
+        internalCode: row.customer_internal_code,
+        companyName: row.customer_company_name,
+      },
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        releases,
+        total,
+        page,
+        pageSize,
+      },
+    });
+  } catch (err) {
+    const msg = err && (err.message || err.code || String(err));
+    console.error("GET /releases:", msg);
+    if (err && err.stack) console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: "Erro no servidor",
+      message: msg || "Erro desconhecido",
+    });
+  }
+});
+
+/**
  * GET /releases/status
  * Parâmetros obrigatórios: customerCnpj (14 dígitos), customerReleaseId, releaseDate (YYYY-MM-DD).
  * Retorna ReleaseStatusResponse; se o release não for encontrado/carregado: releaseId null, releaseStatus "not_loaded", analysisStatus "not_analyzed", timesAnalyzed 0.
