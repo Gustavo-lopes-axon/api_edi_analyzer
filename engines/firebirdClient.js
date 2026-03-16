@@ -6,9 +6,10 @@ const CONEXAO_TIMEOUT_MS = 20000;
 /**
  * @param {string} clientPrefix
  * @param {string} sql
+ * @param {Array} [params] - Parâmetros para prepared statement (?). Se omitido, executa sem parâmetros.
  * @returns {Promise<Array>}
  */
-async function executarQueryFirebird(clientPrefix, sql) {
+async function executarQueryFirebird(clientPrefix, sql, params) {
   const options = getFirebirdConfig(clientPrefix);
 
   const connectPromise = new Promise((resolve, reject) => {
@@ -35,13 +36,18 @@ async function executarQueryFirebird(clientPrefix, sql) {
   const db = await Promise.race([connectPromise, timeoutPromise]);
 
   return new Promise((resolve, reject) => {
-    db.query(sql, function (err, result) {
+    const callback = function (err, result) {
       db.detach();
       if (err) {
         return reject(new Error(`Erro na query: ${err.message}`));
       }
       resolve(result);
-    });
+    };
+    if (params != null && Array.isArray(params) && params.length > 0) {
+      db.query(sql, params, callback);
+    } else {
+      db.query(sql, callback);
+    }
   });
 }
 

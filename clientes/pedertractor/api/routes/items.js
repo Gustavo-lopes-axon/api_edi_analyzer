@@ -21,11 +21,6 @@ const COLS = {
   DESCRICAO: "DESCRICAO",
 };
 
-function escapeSql(value) {
-  if (!value || typeof value !== "string") return "";
-  return value.replace(/'/g, "''");
-}
-
 function get(row, ...keys) {
   for (const key of keys) {
     const k = String(key).toUpperCase();
@@ -81,14 +76,14 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const safePN = escapeSql(customerPN.trim());
+    const partNumberParam = customerPN.trim();
     const sql = `
       SELECT ${COLS.COD_ITEM}, ${COLS.PART_NUMBER}, ${COLS.DESCRICAO}
       FROM ${VIEW_ITEMS}
-      WHERE TRIM(UPPER(COALESCE(${COLS.PART_NUMBER}, ''))) = UPPER('${safePN}')
+      WHERE ${COLS.PART_NUMBER} = ?
     `.trim();
 
-    const rows = await executarQueryFirebird(CLIENT_PREFIX, sql);
+    const rows = await executarQueryFirebird(CLIENT_PREFIX, sql, [partNumberParam]);
 
     const data = (rows || []).map(rowToItemWithDetails);
 

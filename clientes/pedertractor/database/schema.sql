@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS release_analysis_items (
   UNIQUE KEY uq_release_analysis_items_custom_id (custom_id),
   KEY idx_release_analysis_items_analysis_id (release_analysis_id),
   KEY idx_release_analysis_items_customer_pn (customer_pn),
+  KEY idx_release_analysis_items_po_pn (customer_purchase_order, customer_pn),
 
   CONSTRAINT fk_release_analysis_items_analysis
     FOREIGN KEY (release_analysis_id) REFERENCES release_analyses (id)
@@ -376,3 +377,10 @@ CREATE TABLE IF NOT EXISTS order_deliveries (
     ON DELETE CASCADE
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Índice composto para GET /analysis/items/last-firm-date (performance).
+-- Se a tabela release_analysis_items já existir sem este índice, execute:
+--   CREATE INDEX idx_release_analysis_items_po_pn
+--     ON release_analysis_items (customer_purchase_order, customer_pn);
+-- -----------------------------------------------------------------------------

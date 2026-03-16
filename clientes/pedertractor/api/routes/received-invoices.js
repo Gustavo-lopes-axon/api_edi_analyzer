@@ -9,6 +9,7 @@ const { executarQueryFirebird } = require("../../../../engines/firebirdClient.js
 const CLIENT_PREFIX = "PEDERTRACTOR";
 /** View de notas fiscais recebidas (ajuste conforme o nome no Firebird) */
 const VIEW_RECEBIMENTO = "VW_AXON_NF_RECEBIMENTO";
+const VIEW_CAD_ENG_ITEM = "VW_AXON_CAD_ENG_ITEM";
 
 /** Nomes das colunas na view (ajuste conforme a view de recebimento) */
 const COLS = {
@@ -22,11 +23,6 @@ const COLS = {
 };
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
-function escapeSql(value) {
-  if (!value || typeof value !== "string") return "";
-  return value.replace(/'/g, "''");
-}
 
 function get(row, ...keys) {
   for (const key of keys) {
@@ -89,29 +85,31 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const sc = escapeSql(customerCode);
-    const spn = escapeSql(customerPN);
-    const sd = escapeSql(startDate);
-    const ed = escapeSql(endDate);
-
+    const customerCodeParam = customerCode.trim();
+    const customerPNParam = customerPN.trim();
     const dc = COLS.CUSTOMER_CODE;
-    const dpn = COLS.CUSTOMER_PN;
     const ddate = COLS.ISSUE_DATE;
     const dcancel = COLS.CANCELED;
 
     const sql = `
-      SELECT *
-      FROM ${VIEW_RECEBIMENTO}
-      WHERE TRIM(COALESCE(${dc}, '')) = '${sc}'
-        AND TRIM(UPPER(COALESCE(${dpn}, ''))) = UPPER('${spn}')
-        AND CAST(${ddate} AS DATE) >= CAST('${sd}' AS DATE)
-        AND CAST(${ddate} AS DATE) <= CAST('${ed}' AS DATE)
-        AND COALESCE(${dcancel}, 'N') <> 'S'
-        AND COALESCE(${dcancel}, 'N') <> 'T'
-      ORDER BY ${ddate} DESC, ${COLS.NUMBER} DESC
+      SELECT n.*
+      FROM ${VIEW_RECEBIMENTO} n
+      INNER JOIN ${VIEW_CAD_ENG_ITEM} e ON e.COD_ITEM = n.${COLS.CUSTOMER_PN}
+      WHERE TRIM(COALESCE(n.${dc}, '')) = ?
+        AND TRIM(COALESCE(e.PART_NUMBER, '')) = ?
+        AND CAST(n.${ddate} AS DATE) >= CAST(? AS DATE)
+        AND CAST(n.${ddate} AS DATE) <= CAST(? AS DATE)
+        AND COALESCE(n.${dcancel}, 'N') <> 'S'
+        AND COALESCE(n.${dcancel}, 'N') <> 'T'
+      ORDER BY n.${ddate} DESC, n.${COLS.NUMBER} DESC
     `.trim();
 
-    const rows = await executarQueryFirebird(CLIENT_PREFIX, sql);
+    const rows = await executarQueryFirebird(CLIENT_PREFIX, sql, [
+      customerCodeParam,
+      customerPNParam,
+      startDate,
+      endDate,
+    ]);
     const invoices = (rows || []).map(rowToInvoice);
 
     const supplierPN = rows?.length

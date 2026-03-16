@@ -10,6 +10,7 @@ const {
 
 const CLIENT_PREFIX = "PEDERTRACTOR";
 const VIEW_FATURAMENTO = "VW_AXON_FATURAMENTO";
+const VIEW_CAD_ENG_ITEM = "VW_AXON_CAD_ENG_ITEM";
 
 /** Colunas da view VW_AXON_FATURAMENTO (conforme prints) */
 const COLS = {
@@ -28,11 +29,6 @@ const COLS = {
 };
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
-function escapeSql(value) {
-  if (!value || typeof value !== "string") return "";
-  return value.replace(/'/g, "''");
-}
 
 function get(row, ...keys) {
   for (const key of keys) {
@@ -122,23 +118,26 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const sc = escapeSql(customerCode);
-    const spn = escapeSql(customerPN);
-    const sd = escapeSql(startDate);
-    const ed = escapeSql(endDate);
-
+    const customerCodeParam = customerCode.trim();
+    const customerPNParam = customerPN.trim();
     const sql = `
-      SELECT *
-      FROM ${VIEW_FATURAMENTO}
-      WHERE TRIM(COALESCE(${COLS.COD_CLIENTE}, '')) = '${sc}'
-        AND TRIM(UPPER(COALESCE(${COLS.COD_ITEM}, ''))) = UPPER('${spn}')
-        AND CAST(${COLS.DATA_EMISSAO} AS DATE) >= CAST('${sd}' AS DATE)
-        AND CAST(${COLS.DATA_EMISSAO} AS DATE) <= CAST('${ed}' AS DATE)
-        AND COALESCE(CAST(${COLS.SITUACAO_NFE} AS VARCHAR(10)), '') <> '90'
-      ORDER BY ${COLS.DATA_EMISSAO} DESC, ${COLS.NOTA_FISCAL} DESC
+      SELECT f.*
+      FROM ${VIEW_FATURAMENTO} f
+      INNER JOIN ${VIEW_CAD_ENG_ITEM} e ON e.COD_ITEM = f.${COLS.COD_ITEM}
+      WHERE TRIM(COALESCE(f.${COLS.COD_CLIENTE}, '')) = ?
+        AND TRIM(COALESCE(e.PART_NUMBER, '')) = ?
+        AND CAST(f.${COLS.DATA_EMISSAO} AS DATE) >= CAST(? AS DATE)
+        AND CAST(f.${COLS.DATA_EMISSAO} AS DATE) <= CAST(? AS DATE)
+        AND COALESCE(CAST(f.${COLS.SITUACAO_NFE} AS VARCHAR(10)), '') <> '90'
+      ORDER BY f.${COLS.DATA_EMISSAO} DESC, f.${COLS.NOTA_FISCAL} DESC
     `.trim();
 
-    const rows = await executarQueryFirebird(CLIENT_PREFIX, sql);
+    const rows = await executarQueryFirebird(CLIENT_PREFIX, sql, [
+      customerCodeParam,
+      customerPNParam,
+      startDate,
+      endDate,
+    ]);
     const invoices = buildInvoicesArray(rows);
 
     const supplierPN = rows?.length
