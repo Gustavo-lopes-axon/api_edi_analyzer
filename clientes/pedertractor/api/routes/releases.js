@@ -91,10 +91,12 @@ router.get("/", async (req, res) => {
     );
 
     const releaseList = Array.isArray(rows) ? rows : [];
-    const releases = releaseList.map((row) => ({
-      id: row.id,
-      customId: row.custom_id,
-      customerReleaseId: row.customer_release_id,
+    const releases = releaseList.map((row) => {
+      const pk = row.id ?? row.ID ?? row.Id;
+      return {
+        id: pk != null ? Number(pk) : pk,
+        customId: row.custom_id,
+        customerReleaseId: row.customer_release_id,
       releaseDate: row.release_date instanceof Date ? row.release_date.toISOString().slice(0, 10) : String(row.release_date || "").slice(0, 10),
       releaseStatus: row.release_status,
       itemsQty: row.items_qty ?? 0,
@@ -105,7 +107,8 @@ router.get("/", async (req, res) => {
         internalCode: row.customer_internal_code,
         companyName: row.customer_company_name,
       },
-    }));
+    };
+    });
 
     const totalRecords = total;
     const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
