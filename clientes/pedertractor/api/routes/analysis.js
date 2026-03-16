@@ -159,10 +159,10 @@ router.get("/", async (req, res) => {
       id: String(row.id),
       releaseId: String(row.release_id),
       force: Boolean(row.force),
-      analysisVersion: row.analysis_version,
-      analysisStatus: row.analysis_status,
-      analysisDuration: row.analysis_duration,
-      createdAt: row.created_at,
+      analysisVersion: Number(row.analysis_version) || 0,
+      analysisStatus: row.analysis_status || "not_analyzed",
+      analysisDuration: row.analysis_duration || "",
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : (row.created_at ? String(row.created_at) : new Date().toISOString()),
     }));
 
     return res.status(200).json({
@@ -170,7 +170,6 @@ router.get("/", async (req, res) => {
       data: {
         releaseId: String(releaseId),
         analysis: records.length > 0 ? records[0] : null,
-        analyses: records,
       },
     });
   } catch (err) {
