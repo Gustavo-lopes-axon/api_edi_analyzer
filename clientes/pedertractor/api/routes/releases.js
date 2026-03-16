@@ -64,21 +64,22 @@ function validateReleaseBody(body) {
  */
 router.get("/", async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 30));
-    const sortParam = (req.query.sort ?? "-releaseDate").toString().trim();
+    const query = req.query || {};
+    const page = Math.max(1, parseInt(query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
+    const sortParam = String(query.sort ?? "-releaseDate").trim() || "-releaseDate";
     const isDesc = sortParam.startsWith("-");
-    const sortField = (isDesc ? sortParam.slice(1) : sortParam) || "release_date";
+    const sortFieldRaw = (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() || "release_date";
     const allowedSort = ["release_date", "releaseDate", "created_at", "customer_release_id", "release_status"];
-    const orderBy = allowedSort.includes(sortField) ? sortField.replace("releaseDate", "release_date") : "release_date";
+    const orderBy = allowedSort.includes(sortFieldRaw) ? sortFieldRaw.replace("releaseDate", "release_date") : "release_date";
     const orderDir = isDesc ? "DESC" : "ASC";
-    const offset = (page - 1) * pageSize;
+    const offset = Math.max(0, (page - 1) * pageSize);
 
     const countRows = await executarQueryMySQL(CLIENT_PREFIX, "SELECT COUNT(*) AS total FROM releases");
     const total = Number(countRows?.[0]?.total ?? 0);
 
-    const limitNum = Number(pageSize);
-    const offsetNum = Number(offset);
+    const limitNum = Math.min(100, Math.max(0, Math.floor(Number(pageSize)) || 30));
+    const offsetNum = Math.max(0, Math.floor(Number(offset)) || 0);
     const rows = await executarQueryMySQL(
       CLIENT_PREFIX,
       `SELECT r.id, r.custom_id, r.customer_release_id, r.release_date, r.release_status,
@@ -94,22 +95,29 @@ router.get("/", async (req, res) => {
     const releases = releaseList.map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
       const idVal = pk != null ? Number(pk) : pk;
+      const releaseDate = row.release_date;
+      const releaseDateStr =
+        releaseDate instanceof Date
+          ? releaseDate.toISOString().slice(0, 10)
+          : releaseDate != null
+            ? String(releaseDate).slice(0, 10)
+            : "";
       return {
         id: idVal,
         releaseId: idVal,
-        customId: row.custom_id,
+        customId: row.custom_id ?? "",
         customerReleaseId: row.customer_release_id ?? "",
-      releaseDate: row.release_date instanceof Date ? row.release_date.toISOString().slice(0, 10) : String(row.release_date || "").slice(0, 10),
-      releaseStatus: row.release_status,
-      itemsQty: row.items_qty ?? 0,
-      deliveriesQty: row.deliveries_qty ?? 0,
-      createdAt: row.created_at,
-      customer: {
-        cnpj: row.customer_cnpj,
-        internalCode: row.customer_internal_code,
-        companyName: row.customer_company_name,
-      },
-    };
+        releaseDate: releaseDateStr,
+        releaseStatus: row.release_status ?? "",
+        itemsQty: Number(row.items_qty) || 0,
+        deliveriesQty: Number(row.deliveries_qty) || 0,
+        createdAt: row.created_at,
+        customer: {
+          cnpj: row.customer_cnpj ?? "",
+          internalCode: row.customer_internal_code ?? "",
+          companyName: row.customer_company_name ?? "",
+        },
+      };
     });
 
     const totalRecords = total;
@@ -131,7 +139,7 @@ router.get("/", async (req, res) => {
     if (err && err.stack) console.error(err.stack);
     return res.status(500).json({
       success: false,
-      error: "Erro no servidor",
+      error: "Internal server error",
       message: msg || "Erro desconhecido",
     });
   }
