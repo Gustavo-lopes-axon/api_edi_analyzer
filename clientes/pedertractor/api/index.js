@@ -33,6 +33,14 @@ app.use(express.json({ limit: jsonLimit }));
 app.use(express.urlencoded({ limit: jsonLimit, extended: true }));
 
 app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+app.use((req, res, next) => {
   console.log(`[API-EDI RECEBEU] ${req.method} ${req.originalUrl}`);
   console.log(`[API-EDI HEADERS] Authorization:`, req.headers.authorization);
   next();
