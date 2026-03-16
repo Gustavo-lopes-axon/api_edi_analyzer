@@ -107,18 +107,112 @@ router.get("/", async (req, res) => {
       },
     }));
 
+    const totalRecords = total;
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+
     return res.status(200).json({
       success: true,
       data: {
-        releases,
-        total,
         page,
         pageSize,
+        totalRecords,
+        totalPages,
+        records: releases,
       },
     });
   } catch (err) {
     const msg = err && (err.message || err.code || String(err));
     console.error("GET /releases:", msg);
+    if (err && err.stack) console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: "Erro no servidor",
+      message: msg || "Erro desconhecido",
+    });
+  }
+});
+
+/**
+ * GET /releases/all-items
+ * Lista todos os itens de releases (release_items) com paginação.
+ * Query: page (default 1), pageSize (default 30), sort (ex: +supplierPN = ASC, -supplierPN = DESC).
+ * Campos de ordenação: supplierPN, customerPN, releaseDate, createdAt, customerPurchaseOrder.
+ * Retorna { success, data: { page, pageSize, totalRecords, totalPages, records } }.
+ */
+router.get("/all-items", async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 30));
+    const sortParam = (req.query.sort ?? "+supplierPN").toString().trim();
+    const isDesc = sortParam.startsWith("-");
+    const sortFieldRaw = (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() || "supplierPN";
+    const sortField = sortFieldRaw;
+    const sortMap = {
+      supplierPN: "ri.supplier_pn",
+      customerPN: "ri.customer_pn",
+      releaseDate: "r.release_date",
+      createdAt: "ri.created_at",
+      customerPurchaseOrder: "ri.customer_purchase_order",
+    };
+    const orderBy = sortMap[sortField] || "ri.supplier_pn";
+    const orderDir = isDesc ? "DESC" : "ASC";
+    const offset = (page - 1) * pageSize;
+    const limitNum = Number(pageSize);
+    const offsetNum = Number(offset);
+
+    const countRows = await executarQueryMySQL(CLIENT_PREFIX, "SELECT COUNT(*) AS total FROM release_items");
+    const totalRecords = Number(countRows?.[0]?.total ?? 0);
+
+    const rows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT ri.id, ri.custom_id, ri.release_id, ri.sequence, ri.customer_purchase_order,
+              ri.customer_pn, ri.supplier_pn, ri.unit_of_measure, ri.created_at,
+              r.customer_release_id, r.release_date, r.release_status,
+              c.cnpj AS customer_cnpj, c.internal_code AS customer_internal_code
+       FROM release_items ri
+       JOIN releases r ON r.id = ri.release_id
+       JOIN customers c ON c.id = r.customer_id
+       ORDER BY ${orderBy} ${orderDir}
+       LIMIT ${limitNum} OFFSET ${offsetNum}`
+    );
+
+    const itemList = Array.isArray(rows) ? rows : [];
+    const records = itemList.map((row) => ({
+      id: row.id,
+      customId: row.custom_id,
+      releaseId: row.release_id,
+      sequence: row.sequence,
+      customerPurchaseOrder: row.customer_purchase_order,
+      customerPN: row.customer_pn,
+      supplierPN: row.supplier_pn,
+      unitOfMeasure: row.unit_of_measure,
+      createdAt: row.created_at,
+      release: {
+        customerReleaseId: row.customer_release_id,
+        releaseDate: row.release_date instanceof Date ? row.release_date.toISOString().slice(0, 10) : String(row.release_date || "").slice(0, 10),
+        releaseStatus: row.release_status,
+      },
+      customer: {
+        cnpj: row.customer_cnpj,
+        internalCode: row.customer_internal_code,
+      },
+    }));
+
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        page,
+        pageSize,
+        totalRecords,
+        totalPages,
+        records,
+      },
+    });
+  } catch (err) {
+    const msg = err && (err.message || err.code || String(err));
+    console.error("GET /releases/all-items:", msg);
     if (err && err.stack) console.error(err.stack);
     return res.status(500).json({
       success: false,
