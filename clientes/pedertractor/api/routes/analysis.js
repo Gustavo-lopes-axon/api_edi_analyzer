@@ -156,8 +156,8 @@ router.get("/", async (req, res) => {
     );
 
     const records = (Array.isArray(rows) ? rows : []).map((row) => ({
-      id: row.id,
-      releaseId: row.release_id,
+      id: String(row.id),
+      releaseId: String(row.release_id),
       force: Boolean(row.force),
       analysisVersion: row.analysis_version,
       analysisStatus: row.analysis_status,
@@ -167,7 +167,11 @@ router.get("/", async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: { releaseId, analyses: records },
+      data: {
+        releaseId: String(releaseId),
+        analysis: records.length > 0 ? records[0] : null,
+        analyses: records,
+      },
     });
   } catch (err) {
     const msg = err && (err.message || err.code || String(err));
