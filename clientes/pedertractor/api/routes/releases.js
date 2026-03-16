@@ -93,10 +93,12 @@ router.get("/", async (req, res) => {
     const releaseList = Array.isArray(rows) ? rows : [];
     const releases = releaseList.map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
+      const idVal = pk != null ? Number(pk) : pk;
       return {
-        id: pk != null ? Number(pk) : pk,
+        id: idVal,
+        releaseId: idVal,
         customId: row.custom_id,
-        customerReleaseId: row.customer_release_id,
+        customerReleaseId: row.customer_release_id ?? "",
       releaseDate: row.release_date instanceof Date ? row.release_date.toISOString().slice(0, 10) : String(row.release_date || "").slice(0, 10),
       releaseStatus: row.release_status,
       itemsQty: row.items_qty ?? 0,
