@@ -766,7 +766,7 @@ router.get("/:releaseId/items", async (req, res) => {
       countParams
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : "");
+    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null && String(v).trim() !== "" ? String(v).slice(0, 10) : null);
     const itemList = Array.isArray(rows) ? rows : [];
     const records = itemList.map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
@@ -788,7 +788,15 @@ router.get("/:releaseId/items", async (req, res) => {
         lastAccQty: row.last_acc_qty != null ? Number(row.last_acc_qty) : 0,
         accStartDate: toDateStr(row.acc_start_date),
         contactPerson: row.contact_person || "",
-        notes: row.notes || "",
+        notes: (() => {
+          if (!row.notes) return null;
+          try {
+            const parsed = JSON.parse(row.notes);
+            return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+          } catch (e) {
+            return [String(row.notes)];
+          }
+        })(),
       };
     });
 
