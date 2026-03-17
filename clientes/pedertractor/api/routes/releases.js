@@ -901,26 +901,25 @@ router.get("/:releaseId/items/:releaseItemId/deliveries", async (req, res) => {
       [releaseItemIdNum]
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : null);
-    const toTimeStr = (v) => {
-      if (v == null) return null;
-      if (typeof v === "string") return v;
-      if (v instanceof Date) return v.toTimeString().slice(0, 8);
-      return String(v);
-    };
-    const list = Array.isArray(rows) ? rows : [];
-    const data = list.map((row) => {
+    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null && String(v).trim() !== "" ? String(v).slice(0, 10) : null);
+    const deliveries = (Array.isArray(rows) ? rows : []).map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
+
+      let dTime = row.delivery_time;
+      if (dTime && typeof dTime === "string") dTime = dTime.trim();
+      if (!dTime || dTime === "00:00:00") dTime = null;
+
       return {
         releaseDeliveryId: pk != null ? String(pk) : "",
-        sequence: row.sequence != null ? String(row.sequence) : null,
-        type: row.type ?? null,
+        sequence: row.sequence != null ? Number(row.sequence) : 0,
+        type: row.type || "planning",
         dueDate: toDateStr(row.due_date),
-        deliveryTime: toTimeStr(row.delivery_time),
-        qty: row.qty != null ? Number(row.qty) : null,
-        accQty: row.acc_qty != null ? Number(row.acc_qty) : null,
+        deliveryTime: dTime,
+        qty: row.qty != null ? Number(row.qty) : 0,
+        accQty: row.acc_qty != null ? Number(row.acc_qty) : 0,
       };
     });
+    const data = deliveries;
 
     return res.status(200).json({
       success: true,
