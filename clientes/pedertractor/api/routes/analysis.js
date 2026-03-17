@@ -104,17 +104,21 @@ function validateItemAnalysisBody(body) {
 
 /**
  * GET /analysis?releaseId=...
- * Lista análises de um release. releaseId é obrigatório (query string).
+ * Lista análises de um release. Se releaseId não for informado, retorna lista vazia.
  * releaseId pode ser: id interno, customer_release_id ou recordId (internal_code + customer_release_id).
+ * 200: SuccessResponse < AnalysisResponse >; analysis vazio se nenhuma análise encontrada ou se releaseId omitido.
+ * 400: Parâmetros inválidos. 404: Release não encontrado. 500: Erro no servidor.
  */
 router.get("/", async (req, res) => {
   try {
     const releaseId = (req.query.releaseId ?? req.query.release_id ?? "").toString().trim();
     if (!releaseId) {
-      return res.status(400).json({
-        success: false,
-        error: "releaseId is a required parameter",
-        message: "releaseId is a required parameter",
+      return res.status(200).json({
+        success: true,
+        data: {
+          releaseId: "",
+          analysis: [],
+        },
       });
     }
 
@@ -147,29 +151,97 @@ router.get("/", async (req, res) => {
 
     const rows = await executarQueryMySQL(
       CLIENT_PREFIX,
-      `SELECT id, release_id, \`force\`, analysis_version, analysis_status,
-              analysis_duration, created_at
+      `SELECT id, release_id, analysis_version, analysis_status, analysis_duration,
+              created_at, updated_at, totals_json, analysis_configs_json,
+              firm_policy, custom_firm_days, accept_increment, accept_cut, accept_date_variation,
+              transit_qty_policy, create_order_if_not_exists, auto_implement_analysis_result,
+              use_leadtime, default_leadtime, use_receipt
        FROM release_analyses
        WHERE release_id = ?
        ORDER BY id DESC`,
       [releasePk]
     );
 
-    const records = (Array.isArray(rows) ? rows : []).map((row) => ({
-      id: String(row.id),
-      releaseId: String(row.release_id),
-      force: Boolean(row.force),
-      analysisVersion: Number(row.analysis_version) || 0,
-      analysisStatus: row.analysis_status || "not_analyzed",
-      analysisDuration: row.analysis_duration || "",
-      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : (row.created_at ? String(row.created_at) : new Date().toISOString()),
-    }));
+    const toIso = (v) => (v instanceof Date ? v.toISOString() : v != null ? String(v) : null);
+    const defaultTotals = {
+      analyzedItems: 0,
+      validItems: 0,
+      missingItems: 0,
+      uncorrelatedItems: 0,
+      itemsWithIncrementOnFirmPeriod: 0,
+      itemsWithCutOnFirmPeriod: 0,
+      itemsWithDateVariationOnFirmPeriod: 0,
+      itemsWithoutVariationOnFirmPeriod: 0,
+    };
+    const analysis = (Array.isArray(rows) ? rows : []).map((row) => {
+      let totals = defaultTotals;
+      if (row.totals_json) {
+        try {
+          const parsed = typeof row.totals_json === "string" ? JSON.parse(row.totals_json) : row.totals_json;
+          if (parsed && typeof parsed === "object") {
+            totals = { ...defaultTotals, ...parsed };
+          }
+        } catch (_) {}
+      }
+      let analysisConfigs = {
+        firmPolicy: row.firm_policy ?? null,
+        customFirmDays: row.custom_firm_days != null ? Number(row.custom_firm_days) : null,
+        acceptIncrement: row.accept_increment != null ? Boolean(row.accept_increment) : null,
+        acceptCut: row.accept_cut != null ? Boolean(row.accept_cut) : null,
+        acceptDateVariation: row.accept_date_variation != null ? Boolean(row.accept_date_variation) : null,
+        transitQtyPolicy: row.transit_qty_policy ?? null,
+        createOrderIfNotExists: row.create_order_if_not_exists != null ? Boolean(row.create_order_if_not_exists) : null,
+        autoImplementAnalysisResult: row.auto_implement_analysis_result != null ? Boolean(row.auto_implement_analysis_result) : null,
+        useLeadtime: row.use_leadtime != null ? Boolean(row.use_leadtime) : null,
+        defaultLeadtime: row.default_leadtime != null ? Number(row.default_leadtime) : null,
+        useReceipt: row.use_receipt != null ? Boolean(row.use_receipt) : null,
+      };
+      if (row.analysis_configs_json) {
+        try {
+          const parsed = typeof row.analysis_configs_json === "string" ? JSON.parse(row.analysis_configs_json) : row.analysis_configs_json;
+          if (parsed && typeof parsed === "object") {
+            analysisConfigs = {
+              firmPolicy: parsed.firmPolicy ?? parsed.firm_policy ?? analysisConfigs.firmPolicy,
+              customFirmDays: parsed.customFirmDays ?? parsed.custom_firm_days ?? analysisConfigs.customFirmDays,
+              acceptIncrement: parsed.acceptIncrement ?? parsed.accept_increment ?? analysisConfigs.acceptIncrement,
+              acceptCut: parsed.acceptCut ?? parsed.accept_cut ?? analysisConfigs.acceptCut,
+              acceptDateVariation: parsed.acceptDateVariation ?? parsed.accept_date_variation ?? analysisConfigs.acceptDateVariation,
+              transitQtyPolicy: parsed.transitQtyPolicy ?? parsed.transit_qty_policy ?? analysisConfigs.transitQtyPolicy,
+              createOrderIfNotExists: parsed.createOrderIfNotExists ?? parsed.create_order_if_not_exists ?? analysisConfigs.createOrderIfNotExists,
+              autoImplementAnalysisResult: parsed.autoImplementAnalysisResult ?? parsed.auto_implement_analysis_result ?? analysisConfigs.autoImplementAnalysisResult,
+              useLeadtime: parsed.useLeadtime ?? parsed.use_leadtime ?? analysisConfigs.useLeadtime,
+              defaultLeadtime: parsed.defaultLeadtime ?? parsed.default_leadtime ?? analysisConfigs.defaultLeadtime,
+              useReceipt: parsed.useReceipt ?? parsed.use_receipt ?? analysisConfigs.useReceipt,
+            };
+          }
+        } catch (_) {}
+      }
+      return {
+        releaseAnalysisId: String(row.id),
+        analysisVersion: Number(row.analysis_version) || 1,
+        totals: {
+          analyzedItems: Number(totals.analyzedItems) || 0,
+          validItems: Number(totals.validItems) || 0,
+          missingItems: Number(totals.missingItems) || 0,
+          uncorrelatedItems: Number(totals.uncorrelatedItems) || 0,
+          itemsWithIncrementOnFirmPeriod: Number(totals.itemsWithIncrementOnFirmPeriod) || 0,
+          itemsWithCutOnFirmPeriod: Number(totals.itemsWithCutOnFirmPeriod) || 0,
+          itemsWithDateVariationOnFirmPeriod: Number(totals.itemsWithDateVariationOnFirmPeriod) || 0,
+          itemsWithoutVariationOnFirmPeriod: Number(totals.itemsWithoutVariationOnFirmPeriod) || 0,
+        },
+        analysisStatus: row.analysis_status ?? "not_analyzed",
+        processingType: "auto",
+        startProcessingTimestamp: toIso(row.created_at),
+        endProcessingTimestamp: toIso(row.updated_at),
+        analysisConfigs,
+      };
+    });
 
     return res.status(200).json({
       success: true,
       data: {
         releaseId: String(releaseId),
-        analysis: records.length > 0 ? records[0] : null,
+        analysis,
       },
     });
   } catch (err) {
@@ -568,6 +640,652 @@ router.get("/items/last-firm-date", async (req, res) => {
       success: false,
       error: "Erro no servidor",
       message: err.message,
+    });
+  }
+});
+
+/**
+ * GET /analysis/:releaseAnalysisId/header
+ * Retorna o cabeçalho da análise (AnalysisHeader).
+ * 200: SuccessResponse < AnalysisHeader >
+ * 400: releaseAnalysisId inválido (ErrorResponse)
+ * 404: Análise não encontrada (NullResponse: success true, data null)
+ * 500: Erro no servidor (ErrorResponse)
+ */
+router.get("/:releaseAnalysisId/header", async (req, res) => {
+  try {
+    const releaseAnalysisIdRaw = (req.params.releaseAnalysisId ?? "").toString().trim();
+    if (!releaseAnalysisIdRaw) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid parameters",
+        message: "releaseAnalysisId é obrigatório.",
+      });
+    }
+    const releaseAnalysisIdNum = parseInt(releaseAnalysisIdRaw, 10);
+    if (Number.isNaN(releaseAnalysisIdNum) || releaseAnalysisIdNum < 1 || String(releaseAnalysisIdNum) !== releaseAnalysisIdRaw) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid parameters",
+        message: "releaseAnalysisId deve ser um identificador válido da análise.",
+      });
+    }
+
+    const rows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT id, analysis_version, analysis_status, analysis_duration,
+              created_at, updated_at, totals_json, analysis_configs_json,
+              firm_policy, custom_firm_days, accept_increment, accept_cut, accept_date_variation,
+              transit_qty_policy, create_order_if_not_exists, auto_implement_analysis_result,
+              use_leadtime, default_leadtime, use_receipt
+       FROM release_analyses
+       WHERE id = ?
+       LIMIT 1`,
+      [releaseAnalysisIdNum]
+    );
+
+    const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (!row) {
+      return res.status(404).json({
+        success: true,
+        data: null,
+      });
+    }
+
+    const toIso = (v) => (v instanceof Date ? v.toISOString() : v != null ? String(v) : null);
+    const defaultTotals = {
+      analyzedItems: 0,
+      validItems: 0,
+      missingItems: 0,
+      uncorrelatedItems: 0,
+      itemsWithIncrementOnFirmPeriod: 0,
+      itemsWithCutOnFirmPeriod: 0,
+      itemsWithDateVariationOnFirmPeriod: 0,
+      itemsWithoutVariationOnFirmPeriod: 0,
+    };
+    let totals = defaultTotals;
+    if (row.totals_json) {
+      try {
+        const parsed = typeof row.totals_json === "string" ? JSON.parse(row.totals_json) : row.totals_json;
+        if (parsed && typeof parsed === "object") {
+          totals = { ...defaultTotals, ...parsed };
+        }
+      } catch (_) {}
+    }
+    let analysisConfigs = {
+      firmPolicy: row.firm_policy ?? null,
+      customFirmDays: row.custom_firm_days != null ? Number(row.custom_firm_days) : null,
+      acceptIncrement: row.accept_increment != null ? Boolean(row.accept_increment) : null,
+      acceptCut: row.accept_cut != null ? Boolean(row.accept_cut) : null,
+      acceptDateVariation: row.accept_date_variation != null ? Boolean(row.accept_date_variation) : null,
+      transitQtyPolicy: row.transit_qty_policy ?? null,
+      createOrderIfNotExists: row.create_order_if_not_exists != null ? Boolean(row.create_order_if_not_exists) : null,
+      autoImplementAnalysisResult: row.auto_implement_analysis_result != null ? Boolean(row.auto_implement_analysis_result) : null,
+      useLeadtime: row.use_leadtime != null ? Boolean(row.use_leadtime) : null,
+      defaultLeadtime: row.default_leadtime != null ? Number(row.default_leadtime) : null,
+      useReceipt: row.use_receipt != null ? Boolean(row.use_receipt) : null,
+    };
+    if (row.analysis_configs_json) {
+      try {
+        const parsed = typeof row.analysis_configs_json === "string" ? JSON.parse(row.analysis_configs_json) : row.analysis_configs_json;
+        if (parsed && typeof parsed === "object") {
+          analysisConfigs = {
+            firmPolicy: parsed.firmPolicy ?? parsed.firm_policy ?? analysisConfigs.firmPolicy,
+            customFirmDays: parsed.customFirmDays ?? parsed.custom_firm_days ?? analysisConfigs.customFirmDays,
+            acceptIncrement: parsed.acceptIncrement ?? parsed.accept_increment ?? analysisConfigs.acceptIncrement,
+            acceptCut: parsed.acceptCut ?? parsed.accept_cut ?? analysisConfigs.acceptCut,
+            acceptDateVariation: parsed.acceptDateVariation ?? parsed.accept_date_variation ?? analysisConfigs.acceptDateVariation,
+            transitQtyPolicy: parsed.transitQtyPolicy ?? parsed.transit_qty_policy ?? analysisConfigs.transitQtyPolicy,
+            createOrderIfNotExists: parsed.createOrderIfNotExists ?? parsed.create_order_if_not_exists ?? analysisConfigs.createOrderIfNotExists,
+            autoImplementAnalysisResult: parsed.autoImplementAnalysisResult ?? parsed.auto_implement_analysis_result ?? analysisConfigs.autoImplementAnalysisResult,
+            useLeadtime: parsed.useLeadtime ?? parsed.use_leadtime ?? analysisConfigs.useLeadtime,
+            defaultLeadtime: parsed.defaultLeadtime ?? parsed.default_leadtime ?? analysisConfigs.defaultLeadtime,
+            useReceipt: parsed.useReceipt ?? parsed.use_receipt ?? analysisConfigs.useReceipt,
+          };
+        }
+      } catch (_) {}
+    }
+
+    const data = {
+      releaseAnalysisId: String(row.id),
+      analysisVersion: Number(row.analysis_version) || 1,
+      totals: {
+        analyzedItems: Number(totals.analyzedItems) || 0,
+        validItems: Number(totals.validItems) || 0,
+        missingItems: Number(totals.missingItems) || 0,
+        uncorrelatedItems: Number(totals.uncorrelatedItems) || 0,
+        itemsWithIncrementOnFirmPeriod: Number(totals.itemsWithIncrementOnFirmPeriod) || 0,
+        itemsWithCutOnFirmPeriod: Number(totals.itemsWithCutOnFirmPeriod) || 0,
+        itemsWithDateVariationOnFirmPeriod: Number(totals.itemsWithDateVariationOnFirmPeriod) || 0,
+        itemsWithoutVariationOnFirmPeriod: Number(totals.itemsWithoutVariationOnFirmPeriod) || 0,
+      },
+      analysisStatus: row.analysis_status ?? "not_analyzed",
+      processingType: "auto",
+      startProcessingTimestamp: toIso(row.created_at),
+      endProcessingTimestamp: toIso(row.updated_at),
+      analysisConfigs,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    const msg = err && (err.message || err.code || String(err));
+    console.error("GET /analysis/:releaseAnalysisId/header:", msg);
+    if (err && err.stack) console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: "Erro no servidor",
+      message: msg || "Erro desconhecido",
+    });
+  }
+});
+
+/**
+ * GET /analysis/:releaseAnalysisId/items-with-deliveries
+ * Lista itens da análise com entregas (paginação e filtros).
+ * Query: page, pageSize, sort (+supplierPN|+customerPN|+customerPurchaseOrder), filterByVariationType, problem, moqIssue, supplierPN, customerPN, customerPurchaseOrder, isImplemented.
+ * 200: SuccessResponse < PaginatedResponse < ItemAnalysis, ItemAnalysisFilterParams >>
+ * 400: releaseAnalysisId inválido (ErrorResponse). 500: Erro no servidor (ErrorResponse).
+ */
+router.get("/:releaseAnalysisId/items-with-deliveries", async (req, res) => {
+  try {
+    const releaseAnalysisIdRaw = (req.params.releaseAnalysisId ?? "").toString().trim();
+    if (!releaseAnalysisIdRaw) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid parameters",
+        message: "releaseAnalysisId é obrigatório.",
+      });
+    }
+    const releaseAnalysisIdNum = parseInt(releaseAnalysisIdRaw, 10);
+    if (Number.isNaN(releaseAnalysisIdNum) || releaseAnalysisIdNum < 1 || String(releaseAnalysisIdNum) !== releaseAnalysisIdRaw) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid parameters",
+        message: "releaseAnalysisId deve ser um identificador válido da análise.",
+      });
+    }
+
+    const query = req.query || {};
+    const page = Math.max(1, parseInt(query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
+    const sortParam = String(query.sort ?? "+supplierPN").trim() || "+supplierPN";
+    const filterByVariationTypeRaw = (query.filterByVariationType ?? "").toString().trim();
+    const problemRaw = (query.problem ?? "").toString().trim();
+    const moqIssueRaw = (query.moqIssue ?? "").toString().trim();
+    const supplierPNFilter = (query.supplierPN ?? "").toString().trim();
+    const customerPNFilter = (query.customerPN ?? "").toString().trim();
+    const customerPurchaseOrderFilter = (query.customerPurchaseOrder ?? "").toString().trim();
+    const isImplementedRaw = (query.isImplemented ?? "").toString().trim().toLowerCase();
+
+    const conditions = ["rai.release_analysis_id = ?"];
+    const countParams = [releaseAnalysisIdNum];
+
+    const variationTypes = filterByVariationTypeRaw.split(",").map((s) => s.trim()).filter((s) => ["cut", "increment", "date_variation"].includes(s));
+    if (variationTypes.length > 0) {
+      conditions.push(`rai.variation_type IN (${variationTypes.map(() => "?").join(",")})`);
+      countParams.push(...variationTypes);
+    }
+
+    const problems = problemRaw.split(",").map((s) => s.trim()).filter((s) => ["missing", "uncorrelated"].includes(s));
+    if (problems.length === 1) {
+      if (problems[0] === "missing") conditions.push("rai.is_missing = 1");
+      else conditions.push("rai.is_uncorrelated = 1");
+    } else if (problems.length === 2) {
+      conditions.push("(rai.is_missing = 1 OR rai.is_uncorrelated = 1)");
+    }
+
+    const moqIssues = moqIssueRaw.split(",").map((s) => s.trim()).filter((s) => ["less", "not_multiple"].includes(s));
+    if (moqIssues.length === 1) {
+      if (moqIssues[0] === "less") conditions.push("rai.has_qty_less_than_min_order_qty = 1");
+      else conditions.push("rai.has_qty_not_multiple_of_min_order_qty = 1");
+    } else if (moqIssues.length === 2) {
+      conditions.push("(rai.has_qty_less_than_min_order_qty = 1 OR rai.has_qty_not_multiple_of_min_order_qty = 1)");
+    }
+
+    if (supplierPNFilter) {
+      conditions.push("rai.supplier_pn = ?");
+      countParams.push(supplierPNFilter);
+    }
+    if (customerPNFilter) {
+      conditions.push("rai.customer_pn = ?");
+      countParams.push(customerPNFilter);
+    }
+    if (customerPurchaseOrderFilter) {
+      conditions.push("rai.customer_purchase_order = ?");
+      countParams.push(customerPurchaseOrderFilter);
+    }
+    if (isImplementedRaw === "true" || isImplementedRaw === "false") {
+      conditions.push("rai.is_implemented = ?");
+      countParams.push(isImplementedRaw === "true" ? 1 : 0);
+    }
+
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+    const sortMap = { supplierPN: "rai.supplier_pn", customerPN: "rai.customer_pn", customerPurchaseOrder: "rai.customer_purchase_order" };
+    const isDesc = sortParam.startsWith("-");
+    const sortField = (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() || "supplierPN";
+    const orderBy = sortMap[sortField] || "rai.supplier_pn";
+    const orderDir = isDesc ? "DESC" : "ASC";
+    const offset = Math.max(0, (page - 1) * pageSize);
+    const limitNum = Math.min(100, pageSize);
+
+    const countRows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT COUNT(*) AS total FROM release_analysis_items rai ${whereClause}`,
+      countParams
+    );
+    const totalRecords = Number(countRows?.[0]?.total ?? 0);
+
+    const itemRows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT rai.id, rai.sequence, rai.customer_purchase_order, rai.customer_pn, rai.customer_technical_revision,
+              rai.supplier_pn, rai.supplier_technical_revision, rai.customer_acc_qty, rai.supplier_acc_qty, rai.transit_acc_qty,
+              rai.customer_last_invoice_number, rai.supplier_last_invoice_number, rai.transit_invoice_qty,
+              rai.backlog_firm_date, rai.release_firm_date, rai.backlog_firm_qty, rai.release_firm_qty, rai.release_previous_firm_qty,
+              rai.firm_qty_variation, rai.variation_type, rai.is_missing, rai.is_uncorrelated,
+              rai.has_qty_less_than_min_order_qty, rai.has_qty_not_multiple_of_min_order_qty,
+              rai.backlog_total_qty, rai.release_total_qty, rai.total_qty_variation,
+              rai.analysis_result_firm_date, rai.analysis_result_firm_qty, rai.analysis_result_total_qty,
+              rai.comments, rai.is_implemented, rai.implementation_comments
+       FROM release_analysis_items rai
+       ${whereClause}
+       ORDER BY ${orderBy} ${orderDir}
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      countParams
+    );
+
+    const itemList = Array.isArray(itemRows) ? itemRows : [];
+    const itemIds = itemList.map((r) => r.id).filter((id) => id != null);
+    let deliveriesByItem = {};
+    if (itemIds.length > 0) {
+      const placeholders = itemIds.map(() => "?").join(",");
+      const delRows = await executarQueryMySQL(
+        CLIENT_PREFIX,
+        `SELECT analysis_item_id, id, sequence, due_date, delivery_time,
+                backlog_delivery_type, backlog_qty, backlog_acc_qty, release_delivery_type, release_qty, release_acc_qty,
+                qty_variation, acc_qty_variation, analysis_result_delivery_type, analysis_result_qty, analysis_result_acc_qty,
+                analysis_result_qty_variation, analysis_result_acc_qty_variation, comments
+         FROM release_analysis_deliveries
+         WHERE analysis_item_id IN (${placeholders})
+         ORDER BY analysis_item_id, sequence`,
+        itemIds
+      );
+      const delList = Array.isArray(delRows) ? delRows : [];
+      for (const d of delList) {
+        const key = String(d.analysis_item_id);
+        if (!deliveriesByItem[key]) deliveriesByItem[key] = [];
+        deliveriesByItem[key].push(d);
+      }
+    }
+
+    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : null);
+    const toTimeStr = (v) => (v == null ? null : typeof v === "string" ? v : v instanceof Date ? v.toTimeString().slice(0, 8) : String(v));
+    const parseJsonArray = (v) => {
+      if (v == null) return null;
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string") {
+        try {
+          const p = JSON.parse(v);
+          return Array.isArray(p) ? p : null;
+        } catch (_) { return null; }
+        }
+      return null;
+    };
+
+    const records = itemList.map((row) => {
+      const deliveries = deliveriesByItem[String(row.id)] || [];
+      return {
+        itemAnalysisId: String(row.id),
+        sequence: row.sequence != null ? Number(row.sequence) : null,
+        customerPurchaseOrder: row.customer_purchase_order ?? null,
+        customerPN: row.customer_pn ?? null,
+        customerTechnicalRevision: row.customer_technical_revision ?? null,
+        supplierPN: row.supplier_pn ?? null,
+        supplierTechnicalRevision: row.supplier_technical_revision ?? null,
+        customerAccQty: row.customer_acc_qty != null ? Number(row.customer_acc_qty) : null,
+        supplierAccQty: row.supplier_acc_qty != null ? Number(row.supplier_acc_qty) : null,
+        transitAccQty: row.transit_acc_qty != null ? Number(row.transit_acc_qty) : null,
+        customerLastInvoiceNumber: row.customer_last_invoice_number ?? null,
+        supplierLastInvoiceNumber: row.supplier_last_invoice_number ?? null,
+        transitInvoiceQty: row.transit_invoice_qty != null ? Number(row.transit_invoice_qty) : null,
+        backlogFirmDate: toDateStr(row.backlog_firm_date),
+        releaseFirmDate: toDateStr(row.release_firm_date),
+        backlogFirmQty: row.backlog_firm_qty != null ? Number(row.backlog_firm_qty) : null,
+        releaseFirmQty: row.release_firm_qty != null ? Number(row.release_firm_qty) : null,
+        releasePreviousFirmQty: row.release_previous_firm_qty != null ? Number(row.release_previous_firm_qty) : null,
+        firmQtyVariation: row.firm_qty_variation != null ? Number(row.firm_qty_variation) : null,
+        variationType: row.variation_type ?? null,
+        isMissing: Boolean(row.is_missing),
+        isUncorrelated: Boolean(row.is_uncorrelated),
+        hasQtyLessThanMinOrderQty: Boolean(row.has_qty_less_than_min_order_qty),
+        hasQtyNotMultipleOfMinOrderQty: Boolean(row.has_qty_not_multiple_of_min_order_qty),
+        backlogTotalQty: row.backlog_total_qty != null ? Number(row.backlog_total_qty) : null,
+        releaseTotalQty: row.release_total_qty != null ? Number(row.release_total_qty) : null,
+        totalQtyVariation: row.total_qty_variation != null ? Number(row.total_qty_variation) : null,
+        analysisResultFirmDate: toDateStr(row.analysis_result_firm_date),
+        analysisResultFirmQty: row.analysis_result_firm_qty != null ? Number(row.analysis_result_firm_qty) : null,
+        analysisResultTotalQty: row.analysis_result_total_qty != null ? Number(row.analysis_result_total_qty) : null,
+        comments: parseJsonArray(row.comments),
+        isImplemented: Boolean(row.is_implemented),
+        implementationComments: parseJsonArray(row.implementation_comments),
+        deliveries: deliveries.map((d) => ({
+          deliveryAnalysisId: String(d.id),
+          sequence: d.sequence != null ? Number(d.sequence) : null,
+          dueDate: toDateStr(d.due_date),
+          deliveryTime: toTimeStr(d.delivery_time),
+          backlogDeliveryType: d.backlog_delivery_type ?? null,
+          backlogQty: d.backlog_qty != null ? Number(d.backlog_qty) : null,
+          backlogAccQty: d.backlog_acc_qty != null ? Number(d.backlog_acc_qty) : null,
+          releaseDeliveryType: d.release_delivery_type ?? null,
+          releaseQty: d.release_qty != null ? Number(d.release_qty) : null,
+          releaseAccQty: d.release_acc_qty != null ? Number(d.release_acc_qty) : null,
+          qtyVariation: d.qty_variation != null ? Number(d.qty_variation) : null,
+          accQtyVariation: d.acc_qty_variation != null ? Number(d.acc_qty_variation) : null,
+          analysisResultDeliveryType: d.analysis_result_delivery_type ?? null,
+          analysisResultQty: d.analysis_result_qty != null ? Number(d.analysis_result_qty) : null,
+          analysisResultAccQty: d.analysis_result_acc_qty != null ? Number(d.analysis_result_acc_qty) : null,
+          analysisResultQtyVariation: d.analysis_result_qty_variation != null ? Number(d.analysis_result_qty_variation) : null,
+          analysisResultAccQtyVariation: d.analysis_result_acc_qty_variation != null ? Number(d.analysis_result_acc_qty_variation) : null,
+          comments: parseJsonArray(d.comments),
+        })),
+      };
+    });
+
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const searchParams = {};
+    if (filterByVariationTypeRaw) searchParams.filterByVariationType = filterByVariationTypeRaw;
+    if (problemRaw) searchParams.problem = problemRaw;
+    if (moqIssueRaw) searchParams.moqIssue = moqIssueRaw;
+    if (supplierPNFilter) searchParams.supplierPN = supplierPNFilter;
+    if (customerPNFilter) searchParams.customerPN = customerPNFilter;
+    if (customerPurchaseOrderFilter) searchParams.customerPurchaseOrder = customerPurchaseOrderFilter;
+    if (isImplementedRaw === "true" || isImplementedRaw === "false") searchParams.isImplemented = isImplementedRaw === "true";
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        page,
+        pageSize,
+        sort: sortParam,
+        searchParams,
+        totalRecords,
+        totalPages,
+        records,
+      },
+    });
+  } catch (err) {
+    const msg = err && (err.message || err.code || String(err));
+    console.error("GET /analysis/:releaseAnalysisId/items-with-deliveries:", msg);
+    if (err && err.stack) console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: "Erro no servidor",
+      message: msg || "Erro desconhecido",
+    });
+  }
+});
+
+/**
+ * GET /analysis/:releaseAnalysisId/report-data
+ * Retorna dados completos do relatório da análise (ReportData): release, customer, totals, configs e itens com entregas.
+ * 200: SuccessResponse < ReportData >
+ * 400: releaseAnalysisId inválido. 404: Análise não encontrada (NullResponse). 500: Erro no servidor.
+ */
+router.get("/:releaseAnalysisId/report-data", async (req, res) => {
+  try {
+    const releaseAnalysisIdRaw = (req.params.releaseAnalysisId ?? "").toString().trim();
+    if (!releaseAnalysisIdRaw) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid parameters",
+        message: "releaseAnalysisId é obrigatório.",
+      });
+    }
+    const releaseAnalysisIdNum = parseInt(releaseAnalysisIdRaw, 10);
+    if (Number.isNaN(releaseAnalysisIdNum) || releaseAnalysisIdNum < 1 || String(releaseAnalysisIdNum) !== releaseAnalysisIdRaw) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid parameters",
+        message: "releaseAnalysisId deve ser um identificador válido da análise.",
+      });
+    }
+
+    const headerRows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT ra.id, ra.analysis_version, ra.analysis_duration, ra.totals_json, ra.analysis_configs_json,
+              ra.firm_policy, ra.custom_firm_days, ra.accept_increment, ra.accept_cut, ra.accept_date_variation,
+              ra.transit_qty_policy, ra.create_order_if_not_exists, ra.auto_implement_analysis_result,
+              ra.use_leadtime, ra.default_leadtime, ra.use_receipt, ra.updated_at AS analysis_updated_at,
+              r.file_name, r.release_date, r.arrival_timestamp, r.customer_release_id,
+              c.cnpj, c.internal_code, c.company_name, c.trade_name, c.alias, c.municipality, c.state, c.country
+       FROM release_analyses ra
+       JOIN releases r ON r.id = ra.release_id
+       JOIN customers c ON c.id = r.customer_id
+       WHERE ra.id = ?
+       LIMIT 1`,
+      [releaseAnalysisIdNum]
+    );
+
+    const header = Array.isArray(headerRows) && headerRows.length > 0 ? headerRows[0] : null;
+    if (!header) {
+      return res.status(404).json({
+        success: true,
+        data: null,
+      });
+    }
+
+    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : null);
+    const toIso = (v) => (v instanceof Date ? v.toISOString() : v != null ? String(v) : null);
+    const toTimeStr = (v) => (v == null ? null : typeof v === "string" ? v : v instanceof Date ? v.toTimeString().slice(0, 8) : String(v));
+    const parseJsonArray = (v) => {
+      if (v == null) return null;
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string") {
+        try {
+          const p = JSON.parse(v);
+          return Array.isArray(p) ? p : null;
+        } catch (_) { return null; }
+      }
+      return null;
+    };
+
+    const defaultTotals = {
+      analyzedItems: 0,
+      validItems: 0,
+      missingItems: 0,
+      uncorrelatedItems: 0,
+      itemsWithIncrementOnFirmPeriod: 0,
+      itemsWithCutOnFirmPeriod: 0,
+      itemsWithDateVariationOnFirmPeriod: 0,
+      itemsWithoutVariationOnFirmPeriod: 0,
+    };
+    let totals = defaultTotals;
+    if (header.totals_json) {
+      try {
+        const parsed = typeof header.totals_json === "string" ? JSON.parse(header.totals_json) : header.totals_json;
+        if (parsed && typeof parsed === "object") totals = { ...defaultTotals, ...parsed };
+      } catch (_) {}
+    }
+    let analysisConfigs = {
+      firmPolicy: header.firm_policy ?? null,
+      customFirmDays: header.custom_firm_days != null ? Number(header.custom_firm_days) : null,
+      acceptIncrement: header.accept_increment != null ? Boolean(header.accept_increment) : null,
+      acceptCut: header.accept_cut != null ? Boolean(header.accept_cut) : null,
+      acceptDateVariation: header.accept_date_variation != null ? Boolean(header.accept_date_variation) : null,
+      transitQtyPolicy: header.transit_qty_policy ?? null,
+      createOrderIfNotExists: header.create_order_if_not_exists != null ? Boolean(header.create_order_if_not_exists) : null,
+      autoImplementAnalysisResult: header.auto_implement_analysis_result != null ? Boolean(header.auto_implement_analysis_result) : null,
+      useLeadtime: header.use_leadtime != null ? Boolean(header.use_leadtime) : null,
+      defaultLeadtime: header.default_leadtime != null ? Number(header.default_leadtime) : null,
+      useReceipt: header.use_receipt != null ? Boolean(header.use_receipt) : null,
+    };
+    if (header.analysis_configs_json) {
+      try {
+        const parsed = typeof header.analysis_configs_json === "string" ? JSON.parse(header.analysis_configs_json) : header.analysis_configs_json;
+        if (parsed && typeof parsed === "object") {
+          analysisConfigs = {
+            firmPolicy: parsed.firmPolicy ?? parsed.firm_policy ?? analysisConfigs.firmPolicy,
+            customFirmDays: parsed.customFirmDays ?? parsed.custom_firm_days ?? analysisConfigs.customFirmDays,
+            acceptIncrement: parsed.acceptIncrement ?? parsed.accept_increment ?? analysisConfigs.acceptIncrement,
+            acceptCut: parsed.acceptCut ?? parsed.accept_cut ?? analysisConfigs.acceptCut,
+            acceptDateVariation: parsed.acceptDateVariation ?? parsed.accept_date_variation ?? analysisConfigs.acceptDateVariation,
+            transitQtyPolicy: parsed.transitQtyPolicy ?? parsed.transit_qty_policy ?? analysisConfigs.transitQtyPolicy,
+            createOrderIfNotExists: parsed.createOrderIfNotExists ?? parsed.create_order_if_not_exists ?? analysisConfigs.createOrderIfNotExists,
+            autoImplementAnalysisResult: parsed.autoImplementAnalysisResult ?? parsed.auto_implement_analysis_result ?? analysisConfigs.autoImplementAnalysisResult,
+            useLeadtime: parsed.useLeadtime ?? parsed.use_leadtime ?? analysisConfigs.useLeadtime,
+            defaultLeadtime: parsed.defaultLeadtime ?? parsed.default_leadtime ?? analysisConfigs.defaultLeadtime,
+            useReceipt: parsed.useReceipt ?? parsed.use_receipt ?? analysisConfigs.useReceipt,
+          };
+        }
+      } catch (_) {}
+    }
+
+    const itemRows = await executarQueryMySQL(
+      CLIENT_PREFIX,
+      `SELECT id, sequence, customer_purchase_order, customer_pn, customer_technical_revision,
+              supplier_pn, supplier_technical_revision, customer_acc_qty, supplier_acc_qty, transit_acc_qty,
+              customer_last_invoice_number, supplier_last_invoice_number, transit_invoice_qty,
+              backlog_firm_date, release_firm_date, backlog_firm_qty, release_firm_qty, release_previous_firm_qty,
+              firm_qty_variation, variation_type, is_missing, is_uncorrelated,
+              has_qty_less_than_min_order_qty, has_qty_not_multiple_of_min_order_qty,
+              backlog_total_qty, release_total_qty, total_qty_variation,
+              analysis_result_firm_date, analysis_result_firm_qty, analysis_result_total_qty,
+              comments, is_implemented, implementation_comments
+       FROM release_analysis_items
+       WHERE release_analysis_id = ?
+       ORDER BY sequence ASC`,
+      [releaseAnalysisIdNum]
+    );
+
+    const itemList = Array.isArray(itemRows) ? itemRows : [];
+    const itemIds = itemList.map((r) => r.id).filter((id) => id != null);
+    let deliveriesByItem = {};
+    if (itemIds.length > 0) {
+      const placeholders = itemIds.map(() => "?").join(",");
+      const delRows = await executarQueryMySQL(
+        CLIENT_PREFIX,
+        `SELECT analysis_item_id, id, sequence, due_date, delivery_time,
+                backlog_delivery_type, backlog_qty, backlog_acc_qty, release_delivery_type, release_qty, release_acc_qty,
+                qty_variation, acc_qty_variation, analysis_result_delivery_type, analysis_result_qty, analysis_result_acc_qty,
+                analysis_result_qty_variation, analysis_result_acc_qty_variation, comments
+         FROM release_analysis_deliveries
+         WHERE analysis_item_id IN (${placeholders})
+         ORDER BY analysis_item_id, sequence`,
+        itemIds
+      );
+      const delList = Array.isArray(delRows) ? delRows : [];
+      for (const d of delList) {
+        const key = String(d.analysis_item_id);
+        if (!deliveriesByItem[key]) deliveriesByItem[key] = [];
+        deliveriesByItem[key].push(d);
+      }
+    }
+
+    const itemsAnalysis = itemList.map((row) => {
+      const deliveries = deliveriesByItem[String(row.id)] || [];
+      return {
+        itemAnalysisId: String(row.id),
+        sequence: row.sequence != null ? Number(row.sequence) : null,
+        customerPurchaseOrder: row.customer_purchase_order ?? null,
+        customerPN: row.customer_pn ?? null,
+        customerTechnicalRevision: row.customer_technical_revision ?? null,
+        supplierPN: row.supplier_pn ?? null,
+        supplierTechnicalRevision: row.supplier_technical_revision ?? null,
+        customerAccQty: row.customer_acc_qty != null ? Number(row.customer_acc_qty) : null,
+        supplierAccQty: row.supplier_acc_qty != null ? Number(row.supplier_acc_qty) : null,
+        transitAccQty: row.transit_acc_qty != null ? Number(row.transit_acc_qty) : null,
+        customerLastInvoiceNumber: row.customer_last_invoice_number ?? null,
+        supplierLastInvoiceNumber: row.supplier_last_invoice_number ?? null,
+        transitInvoiceQty: row.transit_invoice_qty != null ? Number(row.transit_invoice_qty) : null,
+        backlogFirmDate: toDateStr(row.backlog_firm_date),
+        releaseFirmDate: toDateStr(row.release_firm_date),
+        backlogFirmQty: row.backlog_firm_qty != null ? Number(row.backlog_firm_qty) : null,
+        releaseFirmQty: row.release_firm_qty != null ? Number(row.release_firm_qty) : null,
+        releasePreviousFirmQty: row.release_previous_firm_qty != null ? Number(row.release_previous_firm_qty) : null,
+        firmQtyVariation: row.firm_qty_variation != null ? Number(row.firm_qty_variation) : null,
+        variationType: row.variation_type ?? null,
+        isMissing: Boolean(row.is_missing),
+        isUncorrelated: Boolean(row.is_uncorrelated),
+        hasQtyLessThanMinOrderQty: Boolean(row.has_qty_less_than_min_order_qty),
+        hasQtyNotMultipleOfMinOrderQty: Boolean(row.has_qty_not_multiple_of_min_order_qty),
+        backlogTotalQty: row.backlog_total_qty != null ? Number(row.backlog_total_qty) : null,
+        releaseTotalQty: row.release_total_qty != null ? Number(row.release_total_qty) : null,
+        totalQtyVariation: row.total_qty_variation != null ? Number(row.total_qty_variation) : null,
+        analysisResultFirmDate: toDateStr(row.analysis_result_firm_date),
+        analysisResultFirmQty: row.analysis_result_firm_qty != null ? Number(row.analysis_result_firm_qty) : null,
+        analysisResultTotalQty: row.analysis_result_total_qty != null ? Number(row.analysis_result_total_qty) : null,
+        comments: parseJsonArray(row.comments),
+        isImplemented: Boolean(row.is_implemented),
+        implementationComments: parseJsonArray(row.implementation_comments),
+        deliveries: deliveries.map((d) => ({
+          deliveryAnalysisId: String(d.id),
+          sequence: d.sequence != null ? Number(d.sequence) : null,
+          dueDate: toDateStr(d.due_date),
+          deliveryTime: toTimeStr(d.delivery_time),
+          backlogDeliveryType: d.backlog_delivery_type ?? null,
+          backlogQty: d.backlog_qty != null ? Number(d.backlog_qty) : null,
+          backlogAccQty: d.backlog_acc_qty != null ? Number(d.backlog_acc_qty) : null,
+          releaseDeliveryType: d.release_delivery_type ?? null,
+          releaseQty: d.release_qty != null ? Number(d.release_qty) : null,
+          releaseAccQty: d.release_acc_qty != null ? Number(d.release_acc_qty) : null,
+          qtyVariation: d.qty_variation != null ? Number(d.qty_variation) : null,
+          accQtyVariation: d.acc_qty_variation != null ? Number(d.acc_qty_variation) : null,
+          analysisResultDeliveryType: d.analysis_result_delivery_type ?? null,
+          analysisResultQty: d.analysis_result_qty != null ? Number(d.analysis_result_qty) : null,
+          analysisResultAccQty: d.analysis_result_acc_qty != null ? Number(d.analysis_result_acc_qty) : null,
+          analysisResultQtyVariation: d.analysis_result_qty_variation != null ? Number(d.analysis_result_qty_variation) : null,
+          analysisResultAccQtyVariation: d.analysis_result_acc_qty_variation != null ? Number(d.analysis_result_acc_qty_variation) : null,
+          comments: parseJsonArray(d.comments),
+        })),
+      };
+    });
+
+    const data = {
+      releaseFileName: header.file_name ?? "",
+      analysisVersion: Number(header.analysis_version) || 1,
+      customer: {
+        cnpj: header.cnpj ?? "",
+        internalCode: header.internal_code ?? "",
+        companyName: header.company_name ?? "",
+        tradeName: header.trade_name ?? "",
+        alias: header.alias ?? "",
+        municipality: header.municipality ?? "",
+        state: header.state ?? "",
+        country: header.country ?? "",
+      },
+      releaseDate: toDateStr(header.release_date),
+      arrivalTimestamp: toIso(header.arrival_timestamp),
+      customerReleaseId: header.customer_release_id ?? "",
+      analysisDuration: header.analysis_duration ?? "",
+      analysisTimestamp: toIso(header.analysis_updated_at),
+      totals: {
+        analyzedItems: Number(totals.analyzedItems) || 0,
+        validItems: Number(totals.validItems) || 0,
+        missingItems: Number(totals.missingItems) || 0,
+        uncorrelatedItems: Number(totals.uncorrelatedItems) || 0,
+        itemsWithIncrementOnFirmPeriod: Number(totals.itemsWithIncrementOnFirmPeriod) || 0,
+        itemsWithCutOnFirmPeriod: Number(totals.itemsWithCutOnFirmPeriod) || 0,
+        itemsWithDateVariationOnFirmPeriod: Number(totals.itemsWithDateVariationOnFirmPeriod) || 0,
+        itemsWithoutVariationOnFirmPeriod: Number(totals.itemsWithoutVariationOnFirmPeriod) || 0,
+      },
+      analysisConfigs,
+      itemsAnalysis,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    const msg = err && (err.message || err.code || String(err));
+    console.error("GET /analysis/:releaseAnalysisId/report-data:", msg);
+    if (err && err.stack) console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: "Erro no servidor",
+      message: msg || "Erro desconhecido",
     });
   }
 });
