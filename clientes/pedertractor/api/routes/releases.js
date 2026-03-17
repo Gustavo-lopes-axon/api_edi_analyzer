@@ -766,30 +766,29 @@ router.get("/:releaseId/items", async (req, res) => {
       countParams
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : null);
+    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : "");
     const itemList = Array.isArray(rows) ? rows : [];
     const records = itemList.map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
-      const releaseItemIdStr = pk != null ? String(pk) : "";
       return {
-        releaseItemId: releaseItemIdStr,
-        sequence: row.sequence != null ? Number(row.sequence) : null,
-        customerPurchaseOrder: row.customer_purchase_order ?? null,
-        programId: row.program_id ?? null,
+        releaseItemId: pk != null ? String(pk) : "",
+        sequence: row.sequence != null ? Number(row.sequence) : 0,
+        customerPurchaseOrder: row.customer_purchase_order || "",
+        programId: row.program_id != null ? String(row.program_id) : "",
         programDate: toDateStr(row.program_date),
-        customerPN: row.customer_pn ?? null,
-        technicalRevision: row.technical_revision ?? null,
-        supplierPN: row.supplier_pn ?? null,
-        unitOfMeasure: row.unit_of_measure ?? null,
+        customerPN: row.customer_pn || "",
+        technicalRevision: row.technical_revision || "",
+        supplierPN: row.supplier_pn || "",
+        unitOfMeasure: row.unit_of_measure || "PC",
         lastReceivedDate: toDateStr(row.last_received_date),
-        lastReceivedQty: row.last_received_qty != null ? Number(row.last_received_qty) : null,
-        lastInvoiceNumber: row.last_invoice_number ?? null,
-        lastInvoiceSeries: row.last_invoice_series ?? null,
+        lastReceivedQty: row.last_received_qty != null ? Number(row.last_received_qty) : 0,
+        lastInvoiceNumber: row.last_invoice_number || "",
+        lastInvoiceSeries: row.last_invoice_series || "",
         lastInvoiceDate: toDateStr(row.last_invoice_date),
-        lastAccQty: row.last_acc_qty != null ? Number(row.last_acc_qty) : null,
+        lastAccQty: row.last_acc_qty != null ? Number(row.last_acc_qty) : 0,
         accStartDate: toDateStr(row.acc_start_date),
-        contactPerson: row.contact_person ?? null,
-        notes: row.notes ?? null,
+        contactPerson: row.contact_person || "",
+        notes: row.notes || "",
       };
     });
 
@@ -800,17 +799,21 @@ router.get("/:releaseId/items", async (req, res) => {
     if (customerPurchaseOrderFilter) { searchParams.customerPurchaseOrder = customerPurchaseOrderFilter; hasSearchParams = true; }
     if (programIdFilter) { searchParams.programId = programIdFilter; hasSearchParams = true; }
 
+    const responseData = {
+      page,
+      pageSize,
+      sort: sortParam,
+      totalRecords,
+      totalPages,
+      records,
+    };
+    if (hasSearchParams) {
+      responseData.searchParams = searchParams;
+    }
+
     return res.status(200).json({
       success: true,
-      data: {
-        page,
-        pageSize,
-        sort: sortParam,
-        searchParams: hasSearchParams ? searchParams : null,
-        totalRecords,
-        totalPages,
-        records,
-      },
+      data: responseData,
     });
   } catch (err) {
     const msg = err && (err.message || err.code || String(err));
