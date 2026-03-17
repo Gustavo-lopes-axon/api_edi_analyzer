@@ -795,9 +795,10 @@ router.get("/:releaseId/items", async (req, res) => {
 
     const totalPages = Math.max(1, Number.isFinite(totalRecords) && pageSize > 0 ? Math.ceil(totalRecords / pageSize) : 1);
     const searchParams = {};
-    if (customerPNFilter) searchParams.customerPN = customerPNFilter;
-    if (customerPurchaseOrderFilter) searchParams.customerPurchaseOrder = customerPurchaseOrderFilter;
-    if (programIdFilter) searchParams.programId = programIdFilter;
+    let hasSearchParams = false;
+    if (customerPNFilter) { searchParams.customerPN = customerPNFilter; hasSearchParams = true; }
+    if (customerPurchaseOrderFilter) { searchParams.customerPurchaseOrder = customerPurchaseOrderFilter; hasSearchParams = true; }
+    if (programIdFilter) { searchParams.programId = programIdFilter; hasSearchParams = true; }
 
     return res.status(200).json({
       success: true,
@@ -805,7 +806,7 @@ router.get("/:releaseId/items", async (req, res) => {
         page,
         pageSize,
         sort: sortParam,
-        searchParams,
+        searchParams: hasSearchParams ? searchParams : null,
         totalRecords,
         totalPages,
         records,
