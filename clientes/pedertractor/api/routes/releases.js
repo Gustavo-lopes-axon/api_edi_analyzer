@@ -690,7 +690,7 @@ router.get("/:releaseId/header", async (req, res) => {
  */
 router.get("/:releaseId/items", async (req, res) => {
   try {
-    const releaseIdRaw = (req.params.releaseId ?? "").toString().trim();
+    const releaseIdRaw = (req.params?.releaseId ?? "").toString().trim();
     if (!releaseIdRaw) {
       return res.status(400).json({
         success: false,
@@ -710,7 +710,8 @@ router.get("/:releaseId/items", async (req, res) => {
     const query = req.query || {};
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
-    const sortParam = String(query.sort ?? "+customerPN").trim() || "+customerPN";
+    const sortParamRaw = String(query.sort ?? "+customerPN").trim() || "+customerPN";
+    const sortParam = sortParamRaw.includes(",") ? sortParamRaw.split(",")[0].trim() || "+customerPN" : sortParamRaw;
     const customerPNFilter = (query.customerPN ?? "").toString().trim();
     const customerPurchaseOrderFilter = (query.customerPurchaseOrder ?? "").toString().trim();
     const programIdFilter = (query.programId ?? "").toString().trim();
@@ -718,11 +719,11 @@ router.get("/:releaseId/items", async (req, res) => {
     const isDesc = sortParam.startsWith("-");
     const sortFieldRaw = (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() || "customerPN";
     const sortMap = {
-      customerPN: "ri.customer_pn",
-      customerPurchaseOrder: "ri.customer_purchase_order",
-      programId: "ri.program_id",
+      customerpn: "ri.customer_pn",
+      customerpurchaseorder: "ri.customer_purchase_order",
+      programid: "ri.program_id",
     };
-    const orderBy = sortMap[sortFieldRaw] || "ri.customer_pn";
+    const orderBy = sortMap[sortFieldRaw.toLowerCase()] || "ri.customer_pn";
     const orderDir = isDesc ? "DESC" : "ASC";
     const offset = Math.max(0, (page - 1) * pageSize);
 
@@ -747,7 +748,8 @@ router.get("/:releaseId/items", async (req, res) => {
       `SELECT COUNT(*) AS total FROM release_items ri ${whereClause}`,
       countParams
     );
-    const totalRecords = Number(countRows?.[0]?.total ?? 0);
+    const firstCount = Array.isArray(countRows) && countRows.length > 0 ? countRows[0] : null;
+    const totalRecords = Math.max(0, parseInt(firstCount?.total ?? firstCount?.TOTAL ?? 0, 10) || 0);
 
     const limitNum = Math.min(100, Math.max(1, pageSize));
     const offsetNum = Math.max(0, offset);
@@ -791,7 +793,7 @@ router.get("/:releaseId/items", async (req, res) => {
       };
     });
 
-    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const totalPages = Math.max(1, Number.isFinite(totalRecords) && pageSize > 0 ? Math.ceil(totalRecords / pageSize) : 1);
     const searchParams = {};
     if (customerPNFilter) searchParams.customerPN = customerPNFilter;
     if (customerPurchaseOrderFilter) searchParams.customerPurchaseOrder = customerPurchaseOrderFilter;
