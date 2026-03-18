@@ -37,7 +37,8 @@ function num(v) {
  *
  * Colunas da view usadas:
  *   ORDEM_COMPRA          → customerPurchaseOrder / supplierSalesOrder
- *   COD_ITEM              → customerPN
+ *   COD_ITEM              → customerPN (Part Number montadora)
+ *   COD_INTERNO           → supplierPN (código interno do item)
  *   DATA_ENTREGA          → dueDate da entrega
  *   DATA_NEGOCIADA        → deliveryTime (hora negociada, se preenchida)
  *   QUANTIDADE_PEDIDO     → qty da entrega
@@ -45,7 +46,7 @@ function num(v) {
  *   DATAHORA_REGISTRO     → usado para ordenação de sequência
  *
  * Campos sem coluna direta na view (retornam null/0 por padrão):
- *   customerTechnicalRevision, supplierPN, suppierTechnicalRevision,
+ *   customerTechnicalRevision, suppierTechnicalRevision,
  *   lifecycleStage, category, leadTime
  */
 function rowsToBacklog(customerCode, rows) {
@@ -72,7 +73,7 @@ function rowsToBacklog(customerCode, rows) {
       item = {
         customerPN,
         customerTechnicalRevision: str(get(row, "CUSTOMERTECHNICALREVISION", "REVISAO_CLIENTE", "REV_CLIENTE")) || null,
-        supplierPN: str(get(row, "SUPPLIERPN", "CODIGO_FORNECEDOR")) || null,
+        supplierPN: str(get(row, "SUPPLIERPN", "COD_INTERNO", "CODIGO_FORNECEDOR")) || null,
         suppierTechnicalRevision: str(get(row, "SUPPLIERTECHNICALREVISION", "REVISAO_FORNECEDOR")) || null,
         lifecycleStage: get(row, "LIFECYCLESTAGE", "ESTAGIO_VIDA") != null
           ? str(get(row, "LIFECYCLESTAGE", "ESTAGIO_VIDA")) : null,
