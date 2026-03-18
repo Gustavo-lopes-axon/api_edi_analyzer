@@ -117,13 +117,15 @@ router.get("/", (req, res) => {
       const countRows = await executarQueryMySQL(
         CLIENT_PREFIX,
         `SELECT COUNT(*) AS total FROM releases r JOIN customers c ON c.id = r.customer_id ${whereClause}`,
-        countParams
+        [...countParams]
       );
       console.log("[GET /releases] after count");
       const total = Number(countRows?.[0]?.total ?? 0);
 
       const limitNum = Math.min(100, Math.max(0, Math.floor(Number(pageSize)) || 30));
       const offsetNum = Math.max(0, Math.floor(Number(offset)) || 0);
+      const queryParams = [...countParams, limitNum, offsetNum];
+
       const rows = await executarQueryMySQL(
         CLIENT_PREFIX,
         `SELECT r.id, r.custom_id, r.customer_release_id, r.release_date, r.release_status,
@@ -135,8 +137,8 @@ router.get("/", (req, res) => {
          JOIN customers c ON c.id = r.customer_id
          ${whereClause}
          ORDER BY ${orderBy} ${orderDir}
-         LIMIT ${limitNum} OFFSET ${offsetNum}`,
-        countParams
+         LIMIT ? OFFSET ?`,
+        queryParams
       );
       console.log("[GET /releases] after list query");
 
