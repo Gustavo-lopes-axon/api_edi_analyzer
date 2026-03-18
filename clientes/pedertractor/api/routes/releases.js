@@ -124,7 +124,6 @@ router.get("/", (req, res) => {
 
       const limitNum = Math.min(100, Math.max(0, Math.floor(Number(pageSize)) || 30));
       const offsetNum = Math.max(0, Math.floor(Number(offset)) || 0);
-      const queryParams = [...countParams, limitNum, offsetNum];
 
       const rows = await executarQueryMySQL(
         CLIENT_PREFIX,
@@ -137,8 +136,8 @@ router.get("/", (req, res) => {
          JOIN customers c ON c.id = r.customer_id
          ${whereClause}
          ORDER BY ${orderBy} ${orderDir}
-         LIMIT ? OFFSET ?`,
-        queryParams
+         LIMIT ${limitNum} OFFSET ${offsetNum}`,
+        countParams
       );
       console.log("[GET /releases] after list query");
 
