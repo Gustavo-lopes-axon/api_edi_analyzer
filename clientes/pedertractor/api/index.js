@@ -118,6 +118,15 @@ app.use("/api/axon/prox/v1/releases", releasesRouter);
 app.use("/api/axon/prox/v1/analysis", analysisRouter);
 app.use("/api/axon/prox/v1/orders", ordersRouter);
 
+// Alias de rotas para o Axon Analyzer (desktop local)
+app.use("/v1/pedertractor/prox/customers", customersRouter);
+app.use("/v1/pedertractor/prox/items", itemsRouter);
+app.use("/v1/pedertractor/prox/issued-invoices", issuedInvoicesRouter);
+app.use("/v1/pedertractor/prox/received-invoices", receivedInvoicesRouter);
+app.use("/v1/pedertractor/prox/releases", releasesRouter);
+app.use("/v1/pedertractor/prox/analysis", analysisRouter);
+app.use("/v1/pedertractor/prox/orders", ordersRouter);
+
 app.use("/api/v1/customers", customersRouter);
 app.use("/api/v1/items", itemsRouter);
 app.use("/api/v1/issued-invoices", issuedInvoicesRouter);
