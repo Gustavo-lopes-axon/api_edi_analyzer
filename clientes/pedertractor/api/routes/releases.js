@@ -365,7 +365,7 @@ router.get("/all-items", async (req, res) => {
 /**
  * GET /releases/status
  * Parâmetros obrigatórios: customerCnpj (14 dígitos), customerReleaseId, releaseDate (YYYY-MM-DD).
- * Retorna ReleaseStatusResponse; se o release não for encontrado/carregado: releaseId null, releaseStatus "not_loaded", analysisStatus "not_analyzed", timesAnalyzed 0.
+ * Retorna ReleaseStatusResponse; se o release não for encontrado/carregado: releaseId null, releasesStatus "not_loaded", analysisStatus "not_analyzed", timesAnalyzed 0.
  */
 router.get("/status", async (req, res) => {
   try {
@@ -407,7 +407,7 @@ router.get("/status", async (req, res) => {
       customerReleaseId,
       releaseDate,
       releaseId: null,
-      releaseStatus: "not_loaded",
+      releasesStatus: "not_loaded",
       analysisStatus: "not_analyzed",
       timesAnalyzed: 0,
     };
@@ -435,7 +435,7 @@ router.get("/status", async (req, res) => {
         customerReleaseId,
         releaseDate,
         releaseId: String(row.release_id),
-        releaseStatus: row.release_status ?? "not_loaded",
+        releasesStatus: row.release_status ?? "not_loaded",
         analysisStatus: "not_analyzed",
         timesAnalyzed: 0,
       };
