@@ -109,13 +109,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- FIX PARA O BUG DA URL DO ANALYZER ---
-// O Analyzer envia "releases+status" no lugar de "releases/status"
-app.get("/v1/pedertractor/prox/releases+status", (req, res, next) => {
-  req.url = "/status";
-  releasesRouter(req, res, next);
+// --- MIDDLEWARE PARA CORRIGIR O BUG DO "+" NA URL DO ANALYZER ---
+app.use((req, res, next) => {
+  if (req.url.includes("releases+status")) {
+    req.url = req.url.replace("releases+status", "releases/status");
+  }
+  next();
 });
-// ------------------------------------------
+// ----------------------------------------------------------------
 
 app.use("/customers", customersRouter);
 app.use("/items", itemsRouter);
