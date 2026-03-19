@@ -54,6 +54,9 @@ app.use((req, res, next) => {
       console.log(`[<- DETALHES] ${body}`);
     } else {
       console.log(`[<- SUCESSO ${res.statusCode}] Para ${req.method} ${req.originalUrl}`);
+      // Imprime o corpo da resposta de sucesso para debug
+      const corpoStr = typeof body === 'object' ? JSON.stringify(body) : body;
+      console.log(`[<- CORPO DA RESPOSTA] ${corpoStr}`);
     }
     originalSend.call(this, body);
   };
