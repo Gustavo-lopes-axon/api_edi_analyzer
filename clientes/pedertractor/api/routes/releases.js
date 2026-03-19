@@ -4,7 +4,10 @@ const path = require("path");
 const router = express.Router();
 
 require("dotenv").config({ path: path.join(__dirname, "../../../../.env") });
-const { getConnectionMySQL, executarQueryMySQL } = require("../../../../engines/mysqlClient.js");
+const {
+  getConnectionMySQL,
+  executarQueryMySQL,
+} = require("../../../../engines/mysqlClient.js");
 
 const CLIENT_PREFIX = "PEDERTRACTOR";
 
@@ -17,7 +20,10 @@ const CNPJ_DIGITS_REGEX = /^\d{14}$/;
 function validateReleaseBody(body) {
   const release = body?.release ?? body;
   if (!release || typeof release !== "object") {
-    return { valid: false, message: "Corpo da requisição deve ser um objeto (dados do release)." };
+    return {
+      valid: false,
+      message: "Corpo da requisição deve ser um objeto (dados do release).",
+    };
   }
 
   const customer = release.customer;
@@ -32,10 +38,14 @@ function validateReleaseBody(body) {
 
   const cnpj = (customer.cnpj ?? "").toString().replace(/\D/g, "");
   if (cnpj.length !== 14) {
-    return { valid: false, message: "customer.cnpj é obrigatório (14 dígitos)." };
+    return {
+      valid: false,
+      message: "customer.cnpj é obrigatório (14 dígitos).",
+    };
   }
 
-  const customerReleaseId = release.customerReleaseId ?? release.customer_release_id;
+  const customerReleaseId =
+    release.customerReleaseId ?? release.customer_release_id;
   if (customerReleaseId == null || String(customerReleaseId).trim() === "") {
     return { valid: false, message: "customerReleaseId é obrigatório." };
   }
@@ -45,17 +55,22 @@ function validateReleaseBody(body) {
     return { valid: false, message: "releaseDate é obrigatório." };
   }
   if (!DATE_REGEX.test(releaseDate.trim())) {
-    return { valid: false, message: "releaseDate deve estar no formato YYYY-MM-DD." };
+    return {
+      valid: false,
+      message: "releaseDate deve estar no formato YYYY-MM-DD.",
+    };
   }
 
   const items = release.items;
   if (items !== undefined && !Array.isArray(items)) {
-    return { valid: false, message: "items deve ser um array (pode ser vazio)." };
+    return {
+      valid: false,
+      message: "items deve ser um array (pode ser vazio).",
+    };
   }
 
   return { valid: true, release };
 }
-
 
 /**
  * GET /releases
@@ -69,16 +84,24 @@ router.get("/", (req, res) => {
       console.log("[GET /releases] handler start");
       const query = req.query || {};
       const page = Math.max(1, parseInt(query.page, 10) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
-      const sortParam = String(query.sort ?? "-releaseDate").trim() || "-releaseDate";
+      const pageSize = Math.min(
+        100,
+        Math.max(1, parseInt(query.pageSize, 10) || 30),
+      );
+      const sortParam =
+        String(query.sort ?? "-releaseDate").trim() || "-releaseDate";
       const customerFilter = (query.customer ?? "").toString().trim();
-      const customerReleaseIdFilter = (query.customerReleaseId ?? "").toString().trim();
+      const customerReleaseIdFilter = (query.customerReleaseId ?? "")
+        .toString()
+        .trim();
       const startDate = (query.startDate ?? "").toString().trim();
       const endDate = (query.endDate ?? "").toString().trim();
       const statusFilter = (query.status ?? "").toString().trim();
 
       const isDesc = sortParam.startsWith("-");
-      const sortFieldRaw = (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() || "release_date";
+      const sortFieldRaw =
+        (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() ||
+        "release_date";
       const sortMap = {
         releaseDate: "r.release_date",
         customer: "c.company_name",
@@ -91,9 +114,14 @@ router.get("/", (req, res) => {
       const conditions = [];
       const countParams = [];
       if (customerFilter) {
-        const escaped = customerFilter.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+        const escaped = customerFilter
+          .replace(/\\/g, "\\\\")
+          .replace(/%/g, "\\%")
+          .replace(/_/g, "\\_");
         const likeVal = `%${escaped}%`;
-        conditions.push("(c.company_name LIKE ? OR c.trade_name LIKE ? OR c.alias LIKE ? OR c.cnpj LIKE ?)");
+        conditions.push(
+          "(c.company_name LIKE ? OR c.trade_name LIKE ? OR c.alias LIKE ? OR c.cnpj LIKE ?)",
+        );
         countParams.push(likeVal, likeVal, likeVal, likeVal);
       }
       if (customerReleaseIdFilter) {
@@ -112,17 +140,22 @@ router.get("/", (req, res) => {
         conditions.push("r.release_status = ?");
         countParams.push(statusFilter);
       }
-      const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+      const whereClause = conditions.length
+        ? `WHERE ${conditions.join(" AND ")}`
+        : "";
 
       const countRows = await executarQueryMySQL(
         CLIENT_PREFIX,
         `SELECT COUNT(*) AS total FROM releases r JOIN customers c ON c.id = r.customer_id ${whereClause}`,
-        [...countParams]
+        [...countParams],
       );
       console.log("[GET /releases] after count");
       const total = Number(countRows?.[0]?.total ?? 0);
 
-      const limitNum = Math.min(100, Math.max(0, Math.floor(Number(pageSize)) || 30));
+      const limitNum = Math.min(
+        100,
+        Math.max(0, Math.floor(Number(pageSize)) || 30),
+      );
       const offsetNum = Math.max(0, Math.floor(Number(offset)) || 0);
 
       const rows = await executarQueryMySQL(
@@ -137,13 +170,19 @@ router.get("/", (req, res) => {
          ${whereClause}
          ORDER BY ${orderBy} ${orderDir}
          LIMIT ${limitNum} OFFSET ${offsetNum}`,
-        countParams
+        countParams,
       );
       console.log("[GET /releases] after list query");
 
       const releaseList = Array.isArray(rows) ? rows : [];
-      const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : "");
-      const toIso = (v) => (v instanceof Date ? v.toISOString() : v != null ? String(v) : null);
+      const toDateStr = (v) =>
+        v instanceof Date
+          ? v.toISOString().slice(0, 10)
+          : v != null
+            ? String(v).slice(0, 10)
+            : "";
+      const toIso = (v) =>
+        v instanceof Date ? v.toISOString() : v != null ? String(v) : null;
       const releases = releaseList.map((row) => {
         const pk = row.id ?? row.ID ?? row.Id;
         const idValStr = pk != null ? String(pk) : "";
@@ -177,7 +216,8 @@ router.get("/", (req, res) => {
       if (customerFilter) searchParams.customer = customerFilter;
       if (startDate) searchParams.startDate = startDate;
       if (endDate) searchParams.endDate = endDate;
-      if (customerReleaseIdFilter) searchParams.customerReleaseId = customerReleaseIdFilter;
+      if (customerReleaseIdFilter)
+        searchParams.customerReleaseId = customerReleaseIdFilter;
       if (statusFilter) searchParams.status = statusFilter;
 
       console.log("[GET /releases] before send, records:", releases.length);
@@ -193,22 +233,28 @@ router.get("/", (req, res) => {
           records: releases,
         },
       };
-    let jsonStr;
-    try {
-      jsonStr = JSON.stringify(payload);
-    } catch (serializeErr) {
-      console.error("[GET /releases] JSON.stringify error:", serializeErr && (serializeErr.message || String(serializeErr)));
-      if (!res.headersSent) {
-        return res.status(500).json({
-          success: false,
-          error: "Internal server error",
-          message: "Response serialization failed",
-        });
+      let jsonStr;
+      try {
+        jsonStr = JSON.stringify(payload);
+      } catch (serializeErr) {
+        console.error(
+          "[GET /releases] JSON.stringify error:",
+          serializeErr && (serializeErr.message || String(serializeErr)),
+        );
+        if (!res.headersSent) {
+          return res.status(500).json({
+            success: false,
+            error: "Internal server error",
+            message: "Response serialization failed",
+          });
+        }
+        return;
       }
-      return;
-    }
-    res.status(200).setHeader("Content-Type", "application/json; charset=utf-8").send(jsonStr);
-    console.log("[GET /releases] response sent");
+      res
+        .status(200)
+        .setHeader("Content-Type", "application/json; charset=utf-8")
+        .send(jsonStr);
+      console.log("[GET /releases] response sent");
     } catch (err) {
       const msg = err && (err.message || err.code || String(err));
       console.error("GET /releases:", msg);
@@ -223,13 +269,18 @@ router.get("/", (req, res) => {
     }
   };
   run().catch((err) => {
-    console.error("GET /releases unhandled rejection:", err && (err.message || err.code || String(err)));
+    console.error(
+      "GET /releases unhandled rejection:",
+      err && (err.message || err.code || String(err)),
+    );
     if (err && err.stack) console.error(err.stack);
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
         error: "Internal server error",
-        message: (err && (err.message || err.code || String(err))) || "Erro desconhecido",
+        message:
+          (err && (err.message || err.code || String(err))) ||
+          "Erro desconhecido",
       });
     }
   });
@@ -246,8 +297,13 @@ router.get("/all-items", async (req, res) => {
   try {
     const query = req.query || {};
     const page = Math.max(1, parseInt(query.page, 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
-    const sortParam = String(query.sort ?? "+supplierPN,-releaseDate").trim() || "+supplierPN,-releaseDate";
+    const pageSize = Math.min(
+      100,
+      Math.max(1, parseInt(query.pageSize, 10) || 30),
+    );
+    const sortParam =
+      String(query.sort ?? "+supplierPN,-releaseDate").trim() ||
+      "+supplierPN,-releaseDate";
     const supplierPNFilter = (query.supplierPN ?? "").toString().trim();
     const customerPNFilter = (query.customerPN ?? "").toString().trim();
     const descriptionFilter = (query.description ?? "").toString().trim();
@@ -263,11 +319,16 @@ router.get("/all-items", async (req, res) => {
       countParams.push(customerPNFilter);
     }
     if (descriptionFilter) {
-      const escaped = descriptionFilter.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const escaped = descriptionFilter
+        .replace(/\\/g, "\\\\")
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_");
       conditions.push("ri.notes LIKE ?");
       countParams.push(`%${escaped}%`);
     }
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
 
     const sortMap = {
       supplierPN: "ri.supplier_pn",
@@ -276,11 +337,16 @@ router.get("/all-items", async (req, res) => {
       createdAt: "ri.created_at",
       customerPurchaseOrder: "ri.customer_purchase_order",
     };
-    const orderParts = sortParam.split(",").map((s) => s.trim()).filter(Boolean);
+    const orderParts = sortParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     const orderClauses = orderParts.length
       ? orderParts.map((part) => {
           const isDesc = part.startsWith("-");
-          const field = (isDesc ? part.slice(1) : part.replace(/^\+/, "")).trim() || "supplierPN";
+          const field =
+            (isDesc ? part.slice(1) : part.replace(/^\+/, "")).trim() ||
+            "supplierPN";
           const col = sortMap[field] || "ri.supplier_pn";
           return `${col} ${isDesc ? "DESC" : "ASC"}`;
         })
@@ -293,7 +359,7 @@ router.get("/all-items", async (req, res) => {
     const countRows = await executarQueryMySQL(
       CLIENT_PREFIX,
       `SELECT COUNT(*) AS total FROM release_items ri JOIN releases r ON r.id = ri.release_id ${whereClause}`,
-      countParams
+      countParams,
     );
     const totalRecords = Number(countRows?.[0]?.total ?? 0);
 
@@ -308,13 +374,22 @@ router.get("/all-items", async (req, res) => {
        ${whereClause}
        ORDER BY ${orderBy}
        LIMIT ${limitNum} OFFSET ${offsetNum}`,
-      countParams
+      countParams,
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : "");
+    const toDateStr = (v) =>
+      v instanceof Date
+        ? v.toISOString().slice(0, 10)
+        : v != null
+          ? String(v).slice(0, 10)
+          : "";
     const itemList = Array.isArray(rows) ? rows : [];
     const records = itemList.map((row) => {
-      const customerName = row.customer_trade_name ?? row.customer_alias ?? row.customer_company_name ?? "";
+      const customerName =
+        row.customer_trade_name ??
+        row.customer_alias ??
+        row.customer_company_name ??
+        "";
       return {
         customerPN: row.customer_pn ?? "",
         customerTechnicalRevision: row.technical_revision ?? null,
@@ -369,7 +444,10 @@ router.get("/all-items", async (req, res) => {
  */
 router.get("/status", async (req, res) => {
   try {
-    const customerCnpj = (req.query.customerCnpj ?? "").toString().replace(/\D/g, "").trim();
+    const customerCnpj = (req.query.customerCnpj ?? "")
+      .toString()
+      .replace(/\D/g, "")
+      .trim();
     const customerReleaseId = req.query.customerReleaseId?.trim();
     const releaseDate = req.query.releaseDate?.trim();
 
@@ -390,7 +468,8 @@ router.get("/status", async (req, res) => {
       return res.status(400).json({
         success: false,
         error: "Parâmetros inválidos",
-        message: "customerCnpj deve conter exatamente 14 dígitos (somente números)",
+        message:
+          "customerCnpj deve conter exatamente 14 dígitos (somente números)",
       });
     }
 
@@ -407,7 +486,7 @@ router.get("/status", async (req, res) => {
       customerReleaseId,
       releaseDate,
       releaseId: null,
-      releasesStatus: "not_loaded",
+      releaseStatus: "not_loaded",
       analysisStatus: "not_analyzed",
       timesAnalyzed: 0,
     };
@@ -425,7 +504,7 @@ router.get("/status", async (req, res) => {
          AND r.customer_release_id = ?
          AND r.release_date = ?
        LIMIT 1`,
-      [customerCnpj, customerReleaseId, releaseDate]
+      [customerCnpj, customerReleaseId, releaseDate],
     );
 
     if (rows && rows.length > 0) {
@@ -435,7 +514,7 @@ router.get("/status", async (req, res) => {
         customerReleaseId,
         releaseDate,
         releaseId: String(row.release_id),
-        releasesStatus: row.release_status ?? "not_loaded",
+        releaseStatus: row.release_status ?? "not_loaded",
         analysisStatus: "not_analyzed",
         timesAnalyzed: 0,
       };
@@ -504,9 +583,10 @@ router.get("/timeline", async (req, res) => {
     const itemMeta = await executarQueryMySQL(
       CLIENT_PREFIX,
       `SELECT technical_revision, supplier_pn, notes FROM release_items WHERE customer_pn = ? ORDER BY id DESC LIMIT 1`,
-      [customerPN]
+      [customerPN],
     );
-    const meta = Array.isArray(itemMeta) && itemMeta.length > 0 ? itemMeta[0] : null;
+    const meta =
+      Array.isArray(itemMeta) && itemMeta.length > 0 ? itemMeta[0] : null;
     const customerTechnicalRevision = meta?.technical_revision ?? null;
     const supplierPN = meta?.supplier_pn ?? "";
     const description = meta?.notes ?? "";
@@ -515,9 +595,10 @@ router.get("/timeline", async (req, res) => {
       CLIENT_PREFIX,
       `SELECT supplier_technical_revision, lifecycle_stage, category, lead_time
        FROM order_items WHERE customer_pn = ? ORDER BY id DESC LIMIT 1`,
-      [customerPN]
+      [customerPN],
     );
-    const oi = Array.isArray(orderMeta) && orderMeta.length > 0 ? orderMeta[0] : null;
+    const oi =
+      Array.isArray(orderMeta) && orderMeta.length > 0 ? orderMeta[0] : null;
     const supplierTechnicalRevision = oi?.supplier_technical_revision ?? null;
     const lifecycleStage = oi?.lifecycle_stage ?? null;
     const category = oi?.category ?? null;
@@ -538,13 +619,22 @@ router.get("/timeline", async (req, res) => {
        WHERE ${recordWhere}
        GROUP BY r.id
        ORDER BY r.release_date, r.customer_release_id, c.id`,
-      recordParams
+      recordParams,
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : "");
+    const toDateStr = (v) =>
+      v instanceof Date
+        ? v.toISOString().slice(0, 10)
+        : v != null
+          ? String(v).slice(0, 10)
+          : "";
     const list = Array.isArray(rows) ? rows : [];
     const records = list.map((row) => {
-      const customerName = row.customer_trade_name ?? row.customer_alias ?? row.customer_company_name ?? "";
+      const customerName =
+        row.customer_trade_name ??
+        row.customer_alias ??
+        row.customer_company_name ??
+        "";
       return {
         releaseDate: toDateStr(row.release_date),
         customerReleaseId: row.customer_release_id ?? "",
@@ -607,7 +697,11 @@ router.get("/:releaseId/header", async (req, res) => {
       });
     }
     const releaseIdNum = parseInt(releaseIdRaw, 10);
-    if (Number.isNaN(releaseIdNum) || releaseIdNum < 1 || String(releaseIdNum) !== releaseIdRaw) {
+    if (
+      Number.isNaN(releaseIdNum) ||
+      releaseIdNum < 1 ||
+      String(releaseIdNum) !== releaseIdRaw
+    ) {
       return res.status(400).json({
         success: false,
         error: "Invalid parameters",
@@ -625,7 +719,7 @@ router.get("/:releaseId/header", async (req, res) => {
        FROM releases r
        JOIN customers c ON c.id = r.customer_id
        WHERE r.id = ?`,
-      [releaseIdNum]
+      [releaseIdNum],
     );
 
     const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
@@ -636,8 +730,14 @@ router.get("/:releaseId/header", async (req, res) => {
       });
     }
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null ? String(v).slice(0, 10) : "");
-    const toIso = (v) => (v instanceof Date ? v.toISOString() : v != null ? String(v) : null);
+    const toDateStr = (v) =>
+      v instanceof Date
+        ? v.toISOString().slice(0, 10)
+        : v != null
+          ? String(v).slice(0, 10)
+          : "";
+    const toIso = (v) =>
+      v instanceof Date ? v.toISOString() : v != null ? String(v) : null;
     const pk = row.id ?? row.ID ?? row.Id;
     const idValStr = pk != null ? String(pk) : "";
 
@@ -700,7 +800,11 @@ router.get("/:releaseId/items", async (req, res) => {
       });
     }
     const releaseIdNum = parseInt(releaseIdRaw, 10);
-    if (Number.isNaN(releaseIdNum) || releaseIdNum < 1 || String(releaseIdNum) !== releaseIdRaw) {
+    if (
+      Number.isNaN(releaseIdNum) ||
+      releaseIdNum < 1 ||
+      String(releaseIdNum) !== releaseIdRaw
+    ) {
       return res.status(400).json({
         success: false,
         error: "Invalid parameters",
@@ -710,15 +814,25 @@ router.get("/:releaseId/items", async (req, res) => {
 
     const query = req.query || {};
     const page = Math.max(1, parseInt(query.page, 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize, 10) || 30));
-    const sortParamRaw = String(query.sort ?? "+customerPN").trim() || "+customerPN";
-    const sortParam = sortParamRaw.includes(",") ? sortParamRaw.split(",")[0].trim() || "+customerPN" : sortParamRaw;
+    const pageSize = Math.min(
+      100,
+      Math.max(1, parseInt(query.pageSize, 10) || 30),
+    );
+    const sortParamRaw =
+      String(query.sort ?? "+customerPN").trim() || "+customerPN";
+    const sortParam = sortParamRaw.includes(",")
+      ? sortParamRaw.split(",")[0].trim() || "+customerPN"
+      : sortParamRaw;
     const customerPNFilter = (query.customerPN ?? "").toString().trim();
-    const customerPurchaseOrderFilter = (query.customerPurchaseOrder ?? "").toString().trim();
+    const customerPurchaseOrderFilter = (query.customerPurchaseOrder ?? "")
+      .toString()
+      .trim();
     const programIdFilter = (query.programId ?? "").toString().trim();
 
     const isDesc = sortParam.startsWith("-");
-    const sortFieldRaw = (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() || "customerPN";
+    const sortFieldRaw =
+      (isDesc ? sortParam.slice(1) : sortParam.replace(/^\+/, "")).trim() ||
+      "customerPN";
     const sortMap = {
       customerpn: "ri.customer_pn",
       customerpurchaseorder: "ri.customer_purchase_order",
@@ -747,10 +861,14 @@ router.get("/:releaseId/items", async (req, res) => {
     const countRows = await executarQueryMySQL(
       CLIENT_PREFIX,
       `SELECT COUNT(*) AS total FROM release_items ri ${whereClause}`,
-      countParams
+      countParams,
     );
-    const firstCount = Array.isArray(countRows) && countRows.length > 0 ? countRows[0] : null;
-    const totalRecords = Math.max(0, parseInt(firstCount?.total ?? firstCount?.TOTAL ?? 0, 10) || 0);
+    const firstCount =
+      Array.isArray(countRows) && countRows.length > 0 ? countRows[0] : null;
+    const totalRecords = Math.max(
+      0,
+      parseInt(firstCount?.total ?? firstCount?.TOTAL ?? 0, 10) || 0,
+    );
 
     const limitNum = Math.min(100, Math.max(1, pageSize));
     const offsetNum = Math.max(0, offset);
@@ -764,10 +882,15 @@ router.get("/:releaseId/items", async (req, res) => {
        ${whereClause}
        ORDER BY ${orderBy} ${orderDir}
        LIMIT ${limitNum} OFFSET ${offsetNum}`,
-      countParams
+      countParams,
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null && String(v).trim() !== "" ? String(v).slice(0, 10) : null);
+    const toDateStr = (v) =>
+      v instanceof Date
+        ? v.toISOString().slice(0, 10)
+        : v != null && String(v).trim() !== ""
+          ? String(v).slice(0, 10)
+          : null;
     const itemList = Array.isArray(rows) ? rows : [];
     const records = itemList.map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
@@ -782,7 +905,8 @@ router.get("/:releaseId/items", async (req, res) => {
         supplierPN: row.supplier_pn || "",
         unitOfMeasure: row.unit_of_measure || "PC",
         lastReceivedDate: toDateStr(row.last_received_date),
-        lastReceivedQty: row.last_received_qty != null ? Number(row.last_received_qty) : 0,
+        lastReceivedQty:
+          row.last_received_qty != null ? Number(row.last_received_qty) : 0,
         lastInvoiceNumber: row.last_invoice_number || "",
         lastInvoiceSeries: row.last_invoice_series || "",
         lastInvoiceDate: toDateStr(row.last_invoice_date),
@@ -801,12 +925,26 @@ router.get("/:releaseId/items", async (req, res) => {
       };
     });
 
-    const totalPages = Math.max(1, Number.isFinite(totalRecords) && pageSize > 0 ? Math.ceil(totalRecords / pageSize) : 1);
+    const totalPages = Math.max(
+      1,
+      Number.isFinite(totalRecords) && pageSize > 0
+        ? Math.ceil(totalRecords / pageSize)
+        : 1,
+    );
     const searchParams = {};
     let hasSearchParams = false;
-    if (customerPNFilter) { searchParams.customerPN = customerPNFilter; hasSearchParams = true; }
-    if (customerPurchaseOrderFilter) { searchParams.customerPurchaseOrder = customerPurchaseOrderFilter; hasSearchParams = true; }
-    if (programIdFilter) { searchParams.programId = programIdFilter; hasSearchParams = true; }
+    if (customerPNFilter) {
+      searchParams.customerPN = customerPNFilter;
+      hasSearchParams = true;
+    }
+    if (customerPurchaseOrderFilter) {
+      searchParams.customerPurchaseOrder = customerPurchaseOrderFilter;
+      hasSearchParams = true;
+    }
+    if (programIdFilter) {
+      searchParams.programId = programIdFilter;
+      hasSearchParams = true;
+    }
 
     const responseData = {
       page,
@@ -865,14 +1003,22 @@ router.get("/:releaseId/items/:releaseItemId/deliveries", async (req, res) => {
     }
     const releaseIdNum = parseInt(releaseIdRaw, 10);
     const releaseItemIdNum = parseInt(releaseItemIdRaw, 10);
-    if (Number.isNaN(releaseIdNum) || releaseIdNum < 1 || String(releaseIdNum) !== releaseIdRaw) {
+    if (
+      Number.isNaN(releaseIdNum) ||
+      releaseIdNum < 1 ||
+      String(releaseIdNum) !== releaseIdRaw
+    ) {
       return res.status(400).json({
         success: false,
         error: "Invalid parameters",
         message: "releaseId deve ser um identificador válido do release.",
       });
     }
-    if (Number.isNaN(releaseItemIdNum) || releaseItemIdNum < 1 || String(releaseItemIdNum) !== releaseItemIdRaw) {
+    if (
+      Number.isNaN(releaseItemIdNum) ||
+      releaseItemIdNum < 1 ||
+      String(releaseItemIdNum) !== releaseItemIdRaw
+    ) {
       return res.status(400).json({
         success: false,
         error: "Invalid parameters",
@@ -883,7 +1029,7 @@ router.get("/:releaseId/items/:releaseItemId/deliveries", async (req, res) => {
     const itemCheck = await executarQueryMySQL(
       CLIENT_PREFIX,
       "SELECT id FROM release_items WHERE id = ? AND release_id = ? LIMIT 1",
-      [releaseItemIdNum, releaseIdNum]
+      [releaseItemIdNum, releaseIdNum],
     );
     if (!Array.isArray(itemCheck) || itemCheck.length === 0) {
       return res.status(400).json({
@@ -899,10 +1045,15 @@ router.get("/:releaseId/items/:releaseItemId/deliveries", async (req, res) => {
        FROM release_deliveries
        WHERE item_id = ?
        ORDER BY sequence ASC`,
-      [releaseItemIdNum]
+      [releaseItemIdNum],
     );
 
-    const toDateStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v != null && String(v).trim() !== "" ? String(v).slice(0, 10) : null);
+    const toDateStr = (v) =>
+      v instanceof Date
+        ? v.toISOString().slice(0, 10)
+        : v != null && String(v).trim() !== ""
+          ? String(v).slice(0, 10)
+          : null;
     const deliveries = (Array.isArray(rows) ? rows : []).map((row) => {
       const pk = row.id ?? row.ID ?? row.Id;
 
@@ -928,7 +1079,10 @@ router.get("/:releaseId/items/:releaseItemId/deliveries", async (req, res) => {
     });
   } catch (err) {
     const msg = err && (err.message || err.code || String(err));
-    console.error("GET /releases/:releaseId/items/:releaseItemId/deliveries:", msg);
+    console.error(
+      "GET /releases/:releaseId/items/:releaseItemId/deliveries:",
+      msg,
+    );
     if (err && err.stack) console.error(err.stack);
     if (!res.headersSent) {
       return res.status(500).json({
@@ -957,9 +1111,12 @@ router.post("/status", async (req, res) => {
     const releaseStatus = body.releaseStatus ?? body.release_status;
 
     const missing = [];
-    if (releaseId == null || String(releaseId).trim() === "") missing.push("releaseId");
-    if (timestamp == null || String(timestamp).trim() === "") missing.push("timestamp");
-    if (releaseStatus == null || String(releaseStatus).trim() === "") missing.push("releaseStatus");
+    if (releaseId == null || String(releaseId).trim() === "")
+      missing.push("releaseId");
+    if (timestamp == null || String(timestamp).trim() === "")
+      missing.push("timestamp");
+    if (releaseStatus == null || String(releaseStatus).trim() === "")
+      missing.push("releaseStatus");
 
     if (missing.length > 0) {
       return res.status(400).json({
@@ -984,7 +1141,7 @@ router.post("/status", async (req, res) => {
     try {
       [result] = await conn.execute(
         "UPDATE releases SET release_status = ? WHERE customer_release_id = ? OR custom_id LIKE ?",
-        [status, safeId, `%|r:${safeId}`]
+        [status, safeId, `%|r:${safeId}`],
       );
     } finally {
       conn.release();
@@ -993,7 +1150,9 @@ router.post("/status", async (req, res) => {
     const numberOfRecordsUpdated = result.affectedRows ?? 0;
 
     if (process.env.NODE_ENV === "development") {
-      console.log(`[POST /releases/status] releaseId=${releaseId}, releaseStatus=${status}, updated=${numberOfRecordsUpdated}`);
+      console.log(
+        `[POST /releases/status] releaseId=${releaseId}, releaseStatus=${status}, updated=${numberOfRecordsUpdated}`,
+      );
     }
 
     return res.status(200).json({
@@ -1067,8 +1226,12 @@ router.post("/", async (req, res) => {
 
     const release = validation.release;
     const customer = release.customer;
-    const internalCode = String(customer.internalCode ?? customer.internal_code ?? "").trim();
-    const customerReleaseId = String(release.customerReleaseId ?? release.customer_release_id ?? "").trim();
+    const internalCode = String(
+      customer.internalCode ?? customer.internal_code ?? "",
+    ).trim();
+    const customerReleaseId = String(
+      release.customerReleaseId ?? release.customer_release_id ?? "",
+    ).trim();
     const recordId = `${internalCode}${customerReleaseId}`;
 
     conn = await getConnectionMySQL(CLIENT_PREFIX);
@@ -1099,19 +1262,21 @@ router.post("/", async (req, res) => {
         customer.municipality ?? null,
         customer.state ?? null,
         customer.country ?? null,
-      ]
+      ],
     );
 
     const [[customerRow]] = await conn.execute(
       "SELECT id FROM customers WHERE cnpj = ?",
-      [cnpj]
+      [cnpj],
     );
     const customerId = customerRow.id;
 
     // ------------------------------------------------------------------
     // 2. Upsert release header (status = 'loading')
     // ------------------------------------------------------------------
-    const releaseCustomId = String(release.customId ?? release.custom_id ?? "").trim();
+    const releaseCustomId = String(
+      release.customId ?? release.custom_id ?? "",
+    ).trim();
     await conn.execute(
       `INSERT INTO releases
          (custom_id, customer_id, customer_release_id, release_date, file_name,
@@ -1139,12 +1304,12 @@ router.post("/", async (req, res) => {
         toNum(release.itemsQty ?? release.items_qty) ?? 0,
         toNum(release.deliveriesQty ?? release.deliveries_qty) ?? 0,
         release.force ? 1 : 0,
-      ]
+      ],
     );
 
     const [[releaseRow]] = await conn.execute(
       "SELECT id FROM releases WHERE custom_id = ?",
-      [releaseCustomId]
+      [releaseCustomId],
     );
     const releaseId = releaseRow.id;
 
@@ -1222,24 +1387,32 @@ router.post("/", async (req, res) => {
           item.contactPerson ?? item.contact_person ?? null,
           item.supplyType ?? item.supply_type ?? null,
           item.supplyFrequencyCode ?? item.supply_frequency_code ?? null,
-          toDate(item.productionAuthorizationDate ?? item.production_authorization_date),
-          toDate(item.rawMaterialAuthorizationDate ?? item.raw_material_authorization_date),
+          toDate(
+            item.productionAuthorizationDate ??
+              item.production_authorization_date,
+          ),
+          toDate(
+            item.rawMaterialAuthorizationDate ??
+              item.raw_material_authorization_date,
+          ),
           item.unloadLocation ?? item.unload_location ?? null,
           item.itemStatusCode ?? item.item_status_code ?? null,
           item.notes ?? null,
-        ]
+        ],
       );
 
       const [[itemRow]] = await conn.execute(
         "SELECT id FROM release_items WHERE custom_id = ?",
-        [itemCustomId]
+        [itemCustomId],
       );
       const itemId = itemRow.id;
 
       const deliveries = Array.isArray(item.deliveries) ? item.deliveries : [];
 
       for (const delivery of deliveries) {
-        const deliveryCustomId = String(delivery.customId ?? delivery.custom_id ?? "").trim();
+        const deliveryCustomId = String(
+          delivery.customId ?? delivery.custom_id ?? "",
+        ).trim();
 
         await conn.execute(
           `INSERT INTO release_deliveries
@@ -1263,9 +1436,11 @@ router.post("/", async (req, res) => {
             toDate(delivery.dueDate ?? delivery.due_date),
             delivery.deliveryTime ?? delivery.delivery_time ?? null,
             toNum(delivery.qty),
-            toDatetime(delivery.deliveryWindowStart ?? delivery.delivery_window_start),
+            toDatetime(
+              delivery.deliveryWindowStart ?? delivery.delivery_window_start,
+            ),
             toNum(delivery.accQty ?? delivery.acc_qty),
-          ]
+          ],
         );
       }
     }
@@ -1275,13 +1450,15 @@ router.post("/", async (req, res) => {
     // ------------------------------------------------------------------
     await conn.execute(
       "UPDATE releases SET release_status = 'loaded' WHERE id = ?",
-      [releaseId]
+      [releaseId],
     );
 
     await conn.commit();
 
     if (process.env.NODE_ENV === "development") {
-      console.log(`[POST /releases] recordId=${recordId}, releaseId=${releaseId}, items=${items.length}`);
+      console.log(
+        `[POST /releases] recordId=${recordId}, releaseId=${releaseId}, items=${items.length}`,
+      );
     }
 
     return res.status(201).json({
