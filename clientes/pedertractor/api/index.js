@@ -65,11 +65,14 @@ if (!authEnabled) {
   );
 }
 
-app.get("/v1/pedertractor/prox/releases+status", (req, res, next) => {
-  req.url = "/status";
-  releasesRouter(req, res, next);
+// --- INTERCEPTADOR GLOBAL DO BUG DA URL DO ANALYZER ---
+app.use((req, res, next) => {
+  if (req.originalUrl.includes("releases+status") || req.originalUrl.includes("releases status")) {
+    req.url = req.url.replace("releases+status", "releases/status").replace("releases status", "releases/status");
+  }
+  next();
 });
-// ----------------------------------------------------
+// ------------------------------------------------------
 
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
