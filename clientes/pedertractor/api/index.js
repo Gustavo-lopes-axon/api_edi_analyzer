@@ -34,7 +34,10 @@ app.use(express.urlencoded({ limit: jsonLimit, extended: true }));
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  );
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -61,6 +64,12 @@ if (!authEnabled) {
     "[API] PEDERTRACTOR_API_USER ou PEDERTRACTOR_API_PASSWORD não definidos; requisições não serão autenticadas.",
   );
 }
+
+app.get("/v1/pedertractor/prox/releases+status", (req, res, next) => {
+  req.url = "/status";
+  releasesRouter(req, res, next);
+});
+// ----------------------------------------------------
 
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
@@ -108,15 +117,6 @@ app.use((req, res, next) => {
 
   next();
 });
-
-// --- MIDDLEWARE PARA CORRIGIR O BUG DO "+" NA URL DO ANALYZER ---
-app.use((req, res, next) => {
-  if (req.url.includes("releases+status")) {
-    req.url = req.url.replace("releases+status", "releases/status");
-  }
-  next();
-});
-// ----------------------------------------------------------------
 
 app.use("/customers", customersRouter);
 app.use("/items", itemsRouter);
