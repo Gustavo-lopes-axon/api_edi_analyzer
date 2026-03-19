@@ -43,11 +43,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- LOGGER AVANÇADO DE DIAGNÓSTICO ---
 app.use((req, res, next) => {
-  console.log(`[API-EDI RECEBEU] ${req.method} ${req.originalUrl}`);
-  console.log(`[API-EDI HEADERS] Authorization:`, req.headers.authorization);
+  console.log(`\n[-> RECEBIDO] ${req.method} ${req.originalUrl}`);
+
+  const originalSend = res.send;
+  res.send = function (body) {
+    if (res.statusCode >= 400) {
+      console.log(`[<- ERRO ${res.statusCode}] Para ${req.method} ${req.originalUrl}`);
+      console.log(`[<- DETALHES] ${body}`);
+    } else {
+      console.log(`[<- SUCESSO ${res.statusCode}] Para ${req.method} ${req.originalUrl}`);
+    }
+    originalSend.call(this, body);
+  };
+
   next();
 });
+// --------------------------------------
 
 /**
  * Validação por login e senha via Basic Auth.
@@ -64,15 +77,6 @@ if (!authEnabled) {
     "[API] PEDERTRACTOR_API_USER ou PEDERTRACTOR_API_PASSWORD não definidos; requisições não serão autenticadas.",
   );
 }
-
-// --- INTERCEPTADOR GLOBAL DO BUG DA URL DO ANALYZER ---
-app.use((req, res, next) => {
-  if (req.originalUrl.includes("releases+status") || req.originalUrl.includes("releases status")) {
-    req.url = req.url.replace("releases+status", "releases/status").replace("releases status", "releases/status");
-  }
-  next();
-});
-// ------------------------------------------------------
 
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
