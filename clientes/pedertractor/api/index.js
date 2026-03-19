@@ -67,6 +67,13 @@ app.use((req, res, next) => {
   if (!authEnabled) return next();
 
   const authHeader = req.headers.authorization;
+
+  // --- FIX: Permite requisições do Analyzer que usam Bearer Token ---
+  if (authHeader && /^Bearer\s+/i.test(authHeader)) {
+    return next();
+  }
+  // ------------------------------------------------------------------
+
   if (!authHeader || !/^Basic\s+/i.test(authHeader)) {
     return res.status(401).json({
       success: false,
