@@ -62,6 +62,18 @@ app.use((req, res, next) => {
 });
 // --------------------------------------
 
+// --- FIX DEFINITIVO PARA O ERRO DE DIGITAÇÃO DO ANALYZER ---
+app.use((req, res, next) => {
+  if (req.url.includes("releases+status")) {
+    const urlAntiga = req.url;
+    req.url = req.url.replace("releases+status", "releases/status");
+    console.log(`\n[!! CORREÇÃO ATIVADA !!] URL reescrita de: ${urlAntiga}`);
+    console.log(`[!! CORREÇÃO ATIVADA !!] URL reescrita para: ${req.url}`);
+  }
+  next();
+});
+// ------------------------------------------------------------
+
 /**
  * Validação por login e senha via Basic Auth.
  * Header esperado: Authorization: Basic <base64(usuario:senha)>
