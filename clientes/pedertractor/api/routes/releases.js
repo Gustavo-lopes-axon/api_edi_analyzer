@@ -440,7 +440,8 @@ router.get("/all-items", async (req, res) => {
 /**
  * GET /releases/status
  * Parâmetros obrigatórios: customerCnpj (14 dígitos), customerReleaseId, releaseDate (YYYY-MM-DD).
- * Retorna ReleaseStatusResponse; se o release não for encontrado/carregado: releaseId null, releasesStatus "not_loaded", analysisStatus "not_analyzed", timesAnalyzed 0.
+ * Retorna ReleaseStatusResponse; se o release não for encontrado/carregado: releaseId null, releaseStatus "not_loaded", analysisStatus "not_analyzed", timesAnalyzed 0.
+ * analysisStatus e timesAnalyzed vêm de release_analyses (última análise por id; contagem de linhas).
  */
 router.get("/status", async (req, res) => {
   try {
@@ -459,25 +460,23 @@ router.get("/status", async (req, res) => {
     if (missing.length > 0) {
       return res.status(400).json({
         success: false,
-        error: "Parâmetros inválidos",
-        message: `Parâmetros obrigatórios: ${missing.join(", ")}`,
+        error: `Parâmetros inválidos — obrigatórios: ${missing.join(", ")}`,
       });
     }
 
     if (!CNPJ_DIGITS_REGEX.test(customerCnpj)) {
       return res.status(400).json({
         success: false,
-        error: "Parâmetros inválidos",
-        message:
-          "customerCnpj deve conter exatamente 14 dígitos (somente números)",
+        error:
+          "Parâmetros inválidos — customerCnpj deve conter exatamente 14 dígitos (somente números)",
       });
     }
 
     if (!DATE_REGEX.test(releaseDate)) {
       return res.status(400).json({
         success: false,
-        error: "Parâmetros inválidos",
-        message: "releaseDate deve estar no formato YYYY-MM-DD",
+        error:
+          "Parâmetros inválidos — releaseDate deve estar no formato YYYY-MM-DD",
       });
     }
 
@@ -497,7 +496,15 @@ router.get("/status", async (req, res) => {
          r.customer_release_id,
          r.release_date,
          r.release_status,
-         r.id AS release_id
+         r.id AS release_id,
+         (SELECT COUNT(*)
+            FROM release_analyses ra
+           WHERE ra.release_id = r.id) AS times_analyzed,
+         (SELECT ra2.analysis_status
+            FROM release_analyses ra2
+           WHERE ra2.release_id = r.id
+           ORDER BY ra2.id DESC
+           LIMIT 1) AS analysis_status
        FROM releases r
        JOIN customers c ON c.id = r.customer_id
        WHERE c.cnpj = ?
@@ -515,8 +522,8 @@ router.get("/status", async (req, res) => {
         releaseDate,
         releaseId: String(row.release_id),
         releaseStatus: row.release_status ?? "not_loaded",
-        analysisStatus: "not_analyzed",
-        timesAnalyzed: 0,
+        analysisStatus: row.analysis_status ?? "not_analyzed",
+        timesAnalyzed: Number(row.times_analyzed) || 0,
       };
     }
 
@@ -528,8 +535,7 @@ router.get("/status", async (req, res) => {
     console.error("GET /releases/status:", err.message);
     return res.status(500).json({
       success: false,
-      error: "Erro no servidor",
-      message: err.message,
+      error: `Erro no servidor: ${err.message}`,
     });
   }
 });
